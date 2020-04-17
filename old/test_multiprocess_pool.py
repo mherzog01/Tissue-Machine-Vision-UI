@@ -10,7 +10,6 @@ import numpy as np
 import os, time
 import tflite_runtime.interpreter as tflite
 from multiprocessing import Pool
-import cv2
 
 
 # global, but for each process the module is loaded, so only one global var per process
@@ -48,9 +47,6 @@ def do_inference(img_idx, img):
     return logit, pred, duration
 
 def main_par():
-
-    cap = cv2.VideoCapture(STREAM_NUM)  # Change only if you have more than one webcams
-
     optimized_graph_def_file = r'C:\Users\mherzo\Documents\GitHub\tf-models\app\autoML\models\tflite-tissue_defect_ui_20200414053330\model.tflite'
 
     # init model once to find out input dimensions
@@ -58,9 +54,9 @@ def main_par():
     input_details = interpreter_main.get_input_details()
     input_w, intput_h = tuple(input_details[0]['shape'][1:3])
 
-    #num_test_imgs=100
+    num_test_imgs=100
     # pregenerate random images with values in [0,1]
-    #test_imgs = np.random.rand(num_test_imgs, input_w,intput_h).astype(input_details[0]['dtype'])
+    test_imgs = np.random.rand(num_test_imgs, input_w,intput_h).astype(input_details[0]['dtype'])
 
     scores = []
     predictions = []
@@ -69,14 +65,13 @@ def main_par():
     tstart = time.time()
     with Pool(processes=4, initializer=init_interpreter, initargs=(optimized_graph_def_file,)) as pool:         # start 4 worker processes
 
-        ret, image_np = cap.read()
         results = pool.starmap(do_inference, enumerate(test_imgs))
         scores, predictions, it_times = list(zip(*results))
     duration =time.time() - tstart
 
-    # print('Parent process time for %d images: %.2fs'%(num_test_imgs, duration))
-    # print('Inference time for %d images: %.2fs'%(num_test_imgs, sum(it_times)))
-    # print('mean time per image: %.3fs +- %.3f' % (np.mean(it_times), np.std(it_times)) )
+    print('Parent process time for %d images: %.2fs'%(num_test_imgs, duration))
+    print('Inference time for %d images: %.2fs'%(num_test_imgs, sum(it_times)))
+    print('mean time per image: %.3fs +- %.3f' % (np.mean(it_times), np.std(it_times)) )
 
 
 
