@@ -1,0 +1,9 @@
+item {
+  id: 1
+  name: 'Pointer Tip'
+}
+
+item {
+  id: 2
+  name: 'Pointer'
+}

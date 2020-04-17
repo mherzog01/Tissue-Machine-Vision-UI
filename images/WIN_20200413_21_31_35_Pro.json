@@ -1,0 +1,29 @@
+{
+  "version": "4.2.7",
+  "flags": {},
+  "shapes": [
+    {
+      "label": "Pointer Tip",
+      "points": [
+        [
+          349.27536231884056,
+          307.2463768115942
+        ],
+        [
+          382.6086956521739,
+          330.4347826086956
+        ]
+      ],
+      "group_id": null,
+      "shape_type": "rectangle",
+      "flags": {
+        "Not in picture": false,
+        "Not in tissue": false
+      }
+    }
+  ],
+  "imagePath": "WIN_20200413_21_31_35_Pro.jpg",
+  "imageData": null,
+  "imageHeight": 896,
+  "imageWidth": 1600
+}
