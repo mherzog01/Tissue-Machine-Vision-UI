@@ -6,5 +6,5 @@ save_non_project_files = False
 
 [main]
 version = 0.2.0
-recent_files = ['testvideo.py', '..\\models\\research\\object_detection\\utils\\visualization_utils.py', '..\\..\\tmp\\misc\\test.py', '..\\..\\..\\..\\appdata\\local\\continuum\\anaconda3\\envs\\ml\\lib\\site-packages\\numpy\\core\\fromnumeric.py']
+recent_files = ['test_multiprocess_pool.py', 'testvideo.py', '..\\models\\research\\object_detection\\utils\\visualization_utils.py', 'test_serialize_data.py', 'test.py', '..\\..\\..\\..\\AppData\\Local\\Continuum\\anaconda3\\envs\\ML\\Lib\\multiprocessing\\managers.py']
 

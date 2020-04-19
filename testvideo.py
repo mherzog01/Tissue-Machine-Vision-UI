@@ -121,7 +121,7 @@ def main(args):
             class_ids = get_output(interpreter, output_details, 1)
             scores_orig = get_output(interpreter, output_details, 2)
     
-            good_entries = scores >= THRESHOLD
+            good_entries = scores_orig >= THRESHOLD
     
             classes = class_ids[good_entries]
             scores = scores_orig[good_entries]
