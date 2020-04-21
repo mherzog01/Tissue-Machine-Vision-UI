@@ -1,15 +1,13 @@
-from multiprocessing import Process
-import os
-import test_worker
+import win32api
 
-def info(title):
-    print(title)
-    print('module name:', __name__)
-    print('parent process:', os.getppid())
-    print('process id:', os.getpid())
+# import ctypes
 
-if __name__ == '__main__':
-    info('main line')
-    p = Process(target=test_worker.f, args=('bob',))
-    p.start()
-    p.join()
+# awareness = ctypes.c_int()
+# ctypes.windll.shcore.SetProcessDpiAwareness(0)
+
+prevPos = (-1,-1)
+while True:
+    curPos = win32api.GetCursorPos()
+    if prevPos != curPos:
+        prevPos = curPos
+        print(curPos)

@@ -6,5 +6,5 @@ save_non_project_files = False
 
 [main]
 version = 0.2.0
-recent_files = ['test_multiprocess_pool.py', 'testvideo.py', '..\\models\\research\\object_detection\\utils\\visualization_utils.py', 'test_serialize_data.py', 'test.py', '..\\..\\..\\..\\AppData\\Local\\Continuum\\anaconda3\\envs\\ML\\Lib\\multiprocessing\\managers.py']
+recent_files = ['testvideo.py', 'evaluate_automl_multiproc.py', 'ui\\demo_move_mapped_cursor.py', 'ui\\demo_menu.py']
 

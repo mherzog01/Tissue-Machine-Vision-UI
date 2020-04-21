@@ -17,6 +17,10 @@ import tensorflow as tf # TF2
 import cv2
 from object_detection.utils import visualization_utils as vis_util
 import pickle
+import demo_menu
+import win32api
+from PyQt5.QtWidgets import QApplication
+
 
 # Video stream parameters
 MAX_TRIES = 10
@@ -252,6 +256,18 @@ def evaluator(proc_num,
     log_msg('Exiting')
 
 
+#https://stackoverflow.com/questions/13576732/move-mouse-with-python-on-windows-7
+def move_to(x,y):
+    #targ_x, targ_y = map_to_targ(x - orig_x,y - orig_y)
+    win32api.SetCursorPos((x,y))
+    #win32api.SetCursorPos((targ_x,targ_y))
+
+def map_to_targ(rel_x, rel_y):
+    targ_x = (rel_x / src_w * targ_w + targ_rect[0][0]) * scale_factor
+    targ_y = (rel_y / src_h * targ_h + targ_rect[0][1]) * scale_factor
+    print(f'targ_x,targ_y={targ_x,targ_y}')
+    return round(targ_x), round(targ_y)
+
 
 
 def main_par(cmd_line_args):
@@ -319,6 +335,9 @@ def main_par(cmd_line_args):
                 num_images = 0
 
             image_np = img_dict['img']
+********** Requires class
+            src_h, src_w = image_np.shape[0], image_np.shape[1]
+
             good_boxes = ('classes' in results and 'scores' in results and len(cur_boxes) > 0)
 
             # Visualization of the results of a detection, or reapply old.
@@ -356,6 +375,14 @@ def main_par(cmd_line_args):
 
 if __name__ == '__main__':
 
+    targ_rect = [[12,46], [610, 560]]
+    #scale_factor = 2.0
+    scale_factor = 1.0
+    
+    # Set up mapping data
+    targ_w = targ_rect[1][0] - targ_rect[0][0] + 1
+    targ_h = targ_rect[1][1] - targ_rect[0][1] + 1
+    
     parser = argparse.ArgumentParser()
     parser.add_argument(
           '-i',
