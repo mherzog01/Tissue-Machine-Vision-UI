@@ -6,5 +6,5 @@ save_non_project_files = False
 
 [main]
 version = 0.2.0
-recent_files = ['testvideo.py', 'ui\\demo_move_mapped_cursor.py', 'ui\\evaluate_automl_multiproc_mapped.py']
+recent_files = ['ui\\test_module.py', 'ui\\evaluate_automl_multiproc_mapped.py', 'ui\\demo_menu.py', '..\\..\\labelme\\labelme\\app.py']
 

@@ -6,22 +6,29 @@ Created on Thu Apr 16 23:32:03 2020
 
 """
 
+# TODO Address jitters - if objec is still, multiple model evaluations give different values, which move the cursor
+
 import numpy as np
 import multiprocessing as mp
 import sys
 import time
 import traceback
-import random
 import argparse
 import tensorflow as tf # TF2
 import cv2
 from object_detection.utils import visualization_utils as vis_util
-import pickle
 import demo_menu
 import win32api
+import win32con
 from PyQt5.QtWidgets import QApplication
 import logging
+#import test_module
+from importlib import reload
 
+def reload_menu():
+    print('Reloading demo_menu')
+    reload(demo_menu)
+    print('Reload complete')
 
 # Video stream parameters
 MAX_TRIES = 10
@@ -29,8 +36,7 @@ MAX_TRIES = 10
 #STREAM_NUM = 1
 
 # Model eval parameters
-THRESHOLD = 0.3
-EVAL_FREQ = 0.5 # Time between model evaluations, in seconds
+THRESHOLD = 0.1
 
 class TechnicianUI():
     
@@ -45,7 +51,6 @@ class TechnicianUI():
     def get_images(self):
         #TODO Determine why this isn't getting set by the global variable
         STREAM_NUM = 1
-        cap = cv2.VideoCapture(STREAM_NUM)  # Change only if you have more than one webcams
         
         # https://tensorflow-object-detection-api-tutorial.readthedocs.io/en/latest/camera.html
         # Set up video stream
@@ -70,6 +75,8 @@ class TechnicianUI():
         while True:
             i += 1
             ret, image_np = cap.read()
+            # Flip image to adjust for camera position
+            image_np = cv2.flip(image_np, -1)
             yield {'img_num':i,
                    #'img_size':image_np.size,
                    #'sum':np.sum(img),
@@ -144,7 +151,7 @@ class TechnicianUI():
                     pass
             except:
                 log_err('Error:  Input data={input_data}')
-            if not input_data:
+            if input_data is None or not input_data:
                 inc_res('no_data')
                 continue
     
@@ -157,6 +164,8 @@ class TechnicianUI():
                 img_num = input_data['img_num']
                 #img_size = input_data['img_size']
                 img = input_data['img']
+                if img is None:
+                    continue
                 #img_sum = input_data['sum']
             finally:
                 input_lock.release()
@@ -203,10 +212,24 @@ class TechnicianUI():
                 # 1	Classes	Array of 10 integers (output as floating point values) each indicating the index of a class label from the labels file
                 # 2	Scores	Array of 10 floating point values between 0 and 1 representing probability that a class was detected
                 # 3	Number and detections	Array of length 1 containing a floating point value expressing the total number of detection results
+                #
+                # Location
+                #
+                # https://www.tensorflow.org/lite/models/object_detection/overview#location
+                #
+                # For each detected object, the model will return an array of four numbers 
+                # representing a bounding rectangle that surrounds its position. For the 
+                # starter model we provide, the numbers are ordered as follows:
+                
+                # [	top,	left,	bottom,	right	]
+                # The top value represents the distance of the rectangle’s top edge from 
+                # the top of the image, in pixels. The left value represents the left edge’s 
+                # distance from the left of the input image. The other values represent the 
+                # bottom and right edges in a similar manner.
+                
                 eval_start_ns = time.time_ns()
-                orig_width, orig_height = img.shape[:2]
-                image_np_resized = cv2.resize(img,(round(width), round(height)),interpolation=cv2.INTER_AREA)
-        
+                orig_height, orig_width = img.shape[:2]
+                image_np_resized = cv2.resize(img,(round(height), round(width)),interpolation=cv2.INTER_AREA)
                 # Expand dimensions since the model expects images to have shape: [1, None, None, 3]
                 # add N dim
                 model_input_data = np.expand_dims(image_np_resized, axis=0)
@@ -227,12 +250,11 @@ class TechnicianUI():
                 classes = class_ids[good_entries]
                 scores = scores_orig[good_entries]
     
-                #TODO Size box to fit on image to display
-                boxes = [[round(x1*orig_width),
-                          round(y1*orig_height),
-                          round(x2*orig_width),
-                          round(y2*orig_height)]
-                         for [x1,y1,x2,y2] in output_boxes[good_entries]]
+                boxes = [[round(y1*orig_height),
+                          round(x1*orig_width),
+                          round(y2*orig_height),
+                          round(x2*orig_width)]
+                         for [y1,x1,y2,x2] in output_boxes[good_entries]]
                 
                 boxes = np.array(boxes).astype(int)
                 good_boxes = len(boxes) > 0
@@ -269,7 +291,7 @@ class TechnicianUI():
                        results['boxes'] = boxes
                        results['classes'] = classes
                        results['scores'] = scores
-                       self.logger.info(f'Wrote results={results}')
+                       #self.logger.info(f'Wrote results={results}')
                     results_lock.release()
             #break
         status.value = 'stopped'
@@ -280,22 +302,23 @@ class TechnicianUI():
     
     def main_par(self, cmd_line_args):
     
-        #https://stackoverflow.com/questions/13576732/move-mouse-with-python-on-windows-7
+        # TODO Handle situation when cursor is not available - display goes to sleep
+        # https://stackoverflow.com/questions/13576732/move-mouse-with-python-on-windows-7
         def move_to(x,y):
             #targ_x, targ_y = map_to_targ(x - orig_x,y - orig_y)
             win32api.SetCursorPos((int(round(x)),int(round(y))))
             #win32api.SetCursorPos((targ_x,targ_y))
         
         def map_to_targ(rel_x, rel_y):
-            targ_x = (rel_x / src_w * targ_w + targ_rect[0][0]) * scale_factor
-            targ_y = (rel_y / src_h * targ_h + targ_rect[0][1]) * scale_factor
+            targ_x = (rel_x / self.src_w * targ_w + targ_rect[0][1]) * scale_factor
+            targ_y = (rel_y / self.src_h * targ_h + targ_rect[0][0]) * scale_factor
             self.logger.info(f'targ_x,targ_y={targ_x,targ_y}')
             return round(targ_x), round(targ_y)
         
         def get_center(box):
-            # Format of box:  [x1, y1, x2,y2]
+            # Format of box:  [y1, x1, y2,x2]
             #self.logger.info(f'get_center box={box}')
-            [x1, y1, x2, y2] = box
+            [y1, x1, y2, x2] = box
             xc = round(x1 + (x2 - x1) / 2)
             yc = round(y1 + (y2 - y1) / 2)
             #self.logger.info(f'xc,yc={xc},{yc}')
@@ -326,10 +349,10 @@ class TechnicianUI():
             # ------------------------------
             start_time = time.time()
             num_images = 0
-            cur_boxes = []
-            new_boxes = []
-            cur_classes = []
-            cur_scores = []
+            prev_res_boxes = []
+            res_boxes = []
+            res_classes = []
+            res_scores = []
             for img_dict in self.get_images():
                 
                 # Give image to a worker if one is available
@@ -347,20 +370,20 @@ class TechnicianUI():
                 # Check if we got a new box, or should reuse an old box 
                 # for the current picture
                 boxes_changed = False
-                new_img_num = None
+                res_img_num = None
                 results_lock.acquire()
                 if 'boxes' in results:
-                    new_boxes = results['boxes']
-                if not np.array_equal(cur_boxes, new_boxes):
+                    res_boxes = results['boxes']
+                if not np.array_equal(prev_res_boxes, res_boxes):
                     boxes_changed = True
                     #self.logger.info(results)
-                    cur_boxes = new_boxes                
+                    prev_res_boxes = res_boxes                
                     if 'img_num' in results:
-                        new_img_num = results['img_num']
+                        res_img_num = results['img_num']
                     if 'classes' in results:
-                        cur_classes = results['classes']
+                        res_classes = results['classes']
                     if 'scores' in results:
-                        cur_scores = results['scores']
+                        res_scores = results['scores']
                 results_lock.release()
     
                 cur_time = time.time()
@@ -373,23 +396,28 @@ class TechnicianUI():
                     num_images = 0
     
                 image_np = img_dict['img']
+                self.src_h = image_np.shape[0]
+                self.src_w = image_np.shape[1]
     
-                good_boxes = (len(cur_classes) > 0 and len(cur_scores) > 0 and len(cur_boxes) > 0)
+                good_boxes = (len(res_classes) > 0 and len(res_scores) > 0 and len(res_boxes) > 0)
 
                 if disp_stat:
-                    self.logger.info(f'good_boxes={good_boxes}.  new_img_num={new_img_num}, cur_boxes={cur_boxes},  new_classes={cur_classes},  new_scores={cur_scores},  Boxes changed={boxes_changed}')
+                    self.logger.info(f'good_boxes={good_boxes}.  res_img_num={res_img_num}, res_boxes={res_boxes},  new_classes={res_classes},  new_scores={res_scores},  Boxes changed={boxes_changed}')
                     self.logger.info(f'Images/sec = {img_per_sec:0.0f}')
 
+                # -----------------------------------------------------------------
                 # Visualization of the results of a detection, or reapply old.
                 # Also, if the box changed, move cursor to that spot
+                # -----------------------------------------------------------------
                 if good_boxes:
                     try:
                         vis_util.visualize_boxes_and_labels_on_image_array(
                             image_np,
-                            cur_boxes,
-                            cur_classes.astype(int),
-                            cur_scores,
+                            res_boxes,
+                            res_classes.astype(int),
+                            res_scores,
                             category_index,
+                            min_score_thresh=THRESHOLD,
                             #use_normalized_coordinates=True,
                             use_normalized_coordinates=False,
                             line_thickness=2)
@@ -397,21 +425,36 @@ class TechnicianUI():
                         self.logger.info(f'Error calling visualizing boxes on image.  Error={e}')
                         self.logger.info(traceback.print_exc())
                     if boxes_changed:
-                        self.logger.info(f'cur_boxes={cur_boxes}')
-                        xc, yc = get_center(cur_boxes[0]) 
-                        xt, yt = map_to_targ(xc, yc)
-                        if xt is None or yt is None:
-                            self.logger.info(f'Can''t move cursor:  xt,yt None {xt},{yt}')
-                        else:
-                            move_to(xc, yc)
+                        self.logger.info(f'res_boxes={res_boxes}')
+                        if True:
+                            xc, yc = get_center(res_boxes[0]) 
+                            xt, yt = map_to_targ(xc, yc)
+                            if xt is None or yt is None:
+                                self.logger.info(f'Can''t move cursor:  xt,yt None {xt},{yt}')
+                            else:
+                                move_to(xt, yt)
+                        # else:
+                        #     test_module.move_cursor(res_boxes, targ_rect, scale_factor, self.src_h, self.src_w)
+
+                # test_module.analyze_img(image_np)
     
                 # Display output
-                src_h, src_w = 400, 300
-                cv2.imshow('object detection', cv2.resize(image_np, (src_h, src_w)))
+                if not image_np is None:
+                    cv2.imshow('object detection', cv2.resize(image_np, (400, 300)))                
             
-                if cv2.waitKey(1) & 0xFF == ord('q'):
+                k = cv2.waitKey(1) & 0xFF
+                if k == ord('q'):
                     cv2.destroyAllWindows()
                     break
+                elif k == ord('r'):
+                    reload_menu()
+                # A keystroke here that simulates a mouse click doesn't help
+                # because we will lose focus
+                # elif k == ord('c'):
+                #     #https://stackoverflow.com/questions/33319485/how-to-simulate-a-mouse-click-without-interfering-with-actual-mouse-in-python
+                #     win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN,0,0)
+                #     win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP,0,0)
+                    
             #TODO Add GUI to draw picture and rectangle
             self.logger.info('In main:  stopping')
             for i in range(num_processes):
@@ -423,13 +466,16 @@ class TechnicianUI():
 
 if __name__ == '__main__':
 
-    targ_rect = [[12,46], [610, 560]]
+    # ---------------------
+    # Set up mapping data
+    # ---------------------
     #scale_factor = 2.0
     scale_factor = 1.0
-    
-    # Set up mapping data
-    targ_w = targ_rect[1][0] - targ_rect[0][0] + 1
-    targ_h = targ_rect[1][1] - targ_rect[0][1] + 1
+    # Target area for mouse movements
+    # Format:  [[y1, x1], [y2,x2]]
+    targ_rect = [[46,12], [560, 610]]
+    targ_h = targ_rect[1][0] - targ_rect[0][0] + 1
+    targ_w = targ_rect[1][1] - targ_rect[0][1] + 1
 
     # Launch UI    
     app = QApplication(sys.argv)
@@ -470,8 +516,8 @@ if __name__ == '__main__':
     # Python version: 3.7.4 (default, Aug  9 2019, 18:34:13) [MSC v.1915 64 bit (AMD64)]
     print(f'Python version: {sys.version}')
     #num_processes = mp.cpu_count()
-    #num_processes = mp.cpu_count() - 1
-    num_processes = 1
+    num_processes = mp.cpu_count() - 1
+    #num_processes = 1
     print(f'# processes {num_processes}')
     
     # main_seq()

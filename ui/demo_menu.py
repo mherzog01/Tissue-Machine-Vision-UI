@@ -1,9 +1,12 @@
 from PyQt5 import QtGui, QtCore, QtWidgets
 from PyQt5.QtWidgets import *
 import traceback
+import win32con
 import win32api
-
 import sys
+
+import labelme
+import labelme__main__
 
 class MainWindow(QtWidgets.QWidget):
     
@@ -19,9 +22,9 @@ class MainWindow(QtWidgets.QWidget):
             all_widgets = [self]
             
             # TODO Use styles https://doc.qt.io/qtforpython/overviews/stylesheet.html#qt-style-sheets
-            self.btnSimFootPedal = QPushButton("Simulate Foot Pedal Click");
-            self.btnSimFootPedal.clicked.connect(self.pedalClick)
-            all_widgets.append(self.btnSimFootPedal)
+            #self.btnSimFootPedal = QPushButton("Simulate Foot Pedal Click");
+            #self.btnSimFootPedal.clicked.connect(self.pedalClick)
+            #all_widgets.append(self.btnSimFootPedal)
         
             self.statMsg = QLabel('Initializing')
             all_widgets.append(self.statMsg)
@@ -32,6 +35,7 @@ class MainWindow(QtWidgets.QWidget):
             self.cmdList = QListWidget()
             fontFamily = self.cmdList.font().family()
             self.cmdList.setFont(QtGui.QFont(fontFamily,pointSize=30))
+            self.cmdList.itemSelectionChanged.connect(self.sel_cmd)
             all_widgets.append(self.cmdList)
             #print(self.cmdList.font().family(), self.cmdList.font().pointSize())
             labels = ['Take Picture', 'Annotate', 'Nest', 'New Lot']
@@ -44,6 +48,13 @@ class MainWindow(QtWidgets.QWidget):
             self.cmdList.addItems(labels) 
             for i, label in enumerate(labels):
                 self.cmdList.item(i).setStatusTip(f'{i}: {label}')
+
+
+            # ----------------------------
+            # Actions
+            # ----------------------------
+            shortcut = QShortcut(QtGui.QKeySequence('F2'), self)
+            shortcut.activated.connect(self.simulate_click)
 
             # ----------------------------
             # Set global widget attributes
@@ -59,7 +70,7 @@ class MainWindow(QtWidgets.QWidget):
             mainLayout.addWidget(self.cmdList)
             mainLayout.addWidget(self.statMsg)
             mainLayout.addWidget(self.mouseCoords)
-            mainLayout.addWidget(self.btnSimFootPedal)
+            #mainLayout.addWidget(self.btnSimFootPedal)
             self.setLayout(mainLayout)
             
             # ----------------------------
@@ -78,13 +89,31 @@ class MainWindow(QtWidgets.QWidget):
         self.mouse_timer.timeout.connect(self.set_calib_info)
         self.mouse_timer.start(100)
 
-    def pedalClick(self, msg):
+    # def pedalClick(self, msg):
+    #     sel_items = self.cmdList.selectedItems()
+    #     if sel_items is None or len(sel_items) == 0:
+    #         self.set_stat('Please select a menu option')
+    #         return
+    #     sel_item = sel_items[0]
+    #     self.set_stat(f'Excecuting {sel_item.text()}')
+
+    def sel_cmd(self):
         sel_items = self.cmdList.selectedItems()
         if sel_items is None or len(sel_items) == 0:
             self.set_stat('Please select a menu option')
             return
         sel_item = sel_items[0]
-        self.set_stat(f'Excecuting {sel_item.text()}')
+        sel_item_text = sel_item.text()
+        self.set_stat(f'Executing {sel_item_text}')
+        if sel_item_text == 'Annotate':
+            labelme__main__.main()
+        #labelme__main__.main()
+        print('After exec')
+
+    def simulate_click(self):
+        #https://stackoverflow.com/questions/33319485/how-to-simulate-a-mouse-click-without-interfering-with-actual-mouse-in-python
+        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN,0,0)
+        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP,0,0)        
 
     def set_stat(self, msg):
         self.statMsg.setText(msg)
