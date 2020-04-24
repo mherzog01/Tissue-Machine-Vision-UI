@@ -10,7 +10,7 @@ import labelme__main__
 
 class MainWindow(QtWidgets.QWidget):
     
-    def __init__(self):
+    def __init__(self, parent_class=None):
         
         super(MainWindow, self).__init__()
         
@@ -79,6 +79,8 @@ class MainWindow(QtWidgets.QWidget):
             self.mouse_pos = (0,0)
             self.win_mouse_pos = (0,0)
             self.init_mouse_timer()
+            
+            self.parent_class = parent_class
  
         except Exception as e:
             print('Caught error')
@@ -106,7 +108,7 @@ class MainWindow(QtWidgets.QWidget):
         sel_item_text = sel_item.text()
         self.set_stat(f'Executing {sel_item_text}')
         if sel_item_text == 'Annotate':
-            labelme__main__.main()
+            labelme__main__.main(self.parent_class)
         #labelme__main__.main()
         print('After exec')
 
@@ -131,9 +133,7 @@ class MainWindow(QtWidgets.QWidget):
     def disp_mouse_coords(self):
         pos = self.mouse_pos
         pos_x, pos_y = pos[0],pos[1]
-        
         win_x, win_y = self.win_mouse_pos[0], self.win_mouse_pos[1]
-        
         self.mouseCoords.setText(f'Mouse coords: QT ({pos_x}:{pos_y}), Win ({win_x},{win_y}).  Window:  Pos {self.pos().x()}:{self.pos().y()}, Dim ({self.width()},{self.height()})')
         
     # -------------------------------
@@ -146,7 +146,7 @@ class MainWindow(QtWidgets.QWidget):
         # https://stackoverflow.com/a/33376946/11262633
         super(MainWindow, self).paintEvent(e)
         if not hasattr(self,'disp_window_dims'):
-            print('In paint',self.pos().x(),self.pos().y(), self.width(),self.height())
+            print('In paint', self.pos().x(), self.pos().y(), self.width(), self.height())
             self.disp_window_dims = False
         
     # https://stackoverflow.com/questions/41688668/how-to-return-mouse-coordinates-in-realtime

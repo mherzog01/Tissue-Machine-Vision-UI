@@ -17,7 +17,7 @@ from labelme.logger import logger
 from labelme.utils import newIcon
 
 
-def main():
+def main(parent_class = None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--version', '-V', action='store_true', help='show version'
@@ -187,9 +187,15 @@ def main():
 
     win.show()
     win.raise_()
+    
+    print(f'Window:  Pos {win.pos().x()}:{win.pos().y()}, Dim ({win.width()},{win.height()})')
     #sys.exit(app.exec_())
 
-
+    # TODO Get from win
+    if not parent_class is None:
+        #Maximized window (QT - x,y): 960,493 -- 1920, 986
+        parent_class.set_targ_rect([[0,0],[986, 1920]])
+        
 # this main block is required to generate executable by pyinstaller
 if __name__ == '__main__':
     main()

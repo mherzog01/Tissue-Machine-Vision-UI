@@ -24,6 +24,7 @@ from PyQt5.QtWidgets import QApplication
 import logging
 #import test_module
 from importlib import reload
+import datetime
 
 def reload_menu():
     print('Reloading demo_menu')
@@ -40,13 +41,36 @@ THRESHOLD = 0.1
 
 class TechnicianUI():
     
-    def __init__(self):
-        self.logger = mp.log_to_stderr(logging.INFO)
+    def __init__(self, log_level_txt='info'):
+        if log_level_txt == 'debug':
+            log_level = logging.DEBUG
+        elif log_level_txt == 'info':
+            log_level = logging.INFO
+        elif log_level_txt == 'notset':
+            log_level = logging.NOTSET
+        else:
+            log_level = logging.INFO
+        self.logger = mp.log_to_stderr(log_level)
     
     def get_output(self, interpreter, output_details, key):
         output = interpreter.get_tensor(output_details[key]['index'])    
         output = output.squeeze()
         return output
+    
+    def log_msg(self, msg, show_time=False):
+        # self.logger.info(f'#{proc_num}: {msg}')
+        if show_time:
+            time_str = f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}: '
+        else:
+            time_str = ''
+        self.logger.info(f'{time_str}{msg}')
+        
+    def log_debug(self, msg):
+        self.logger.debug(msg)
+        
+    def log_err(self, msg):
+        self.log_msg(f'Error:  {msg}')
+        #loc_res['errors'].append(msg)
     
     def get_images(self):
         #TODO Determine why this isn't getting set by the global variable
@@ -54,7 +78,7 @@ class TechnicianUI():
         
         # https://tensorflow-object-detection-api-tutorial.readthedocs.io/en/latest/camera.html
         # Set up video stream
-        self.logger.info(f'Initializing video stream')
+        self.log_msg(f'Initializing video stream',show_time=True)
         num_tries = 0
         while True:
             cap = cv2.VideoCapture(STREAM_NUM)  # Change only if you have more than one webcams
@@ -67,9 +91,9 @@ class TechnicianUI():
                     num_tries = 0
                     continue
                 if num_tries > MAX_TRIES:
-                    self.logger.info(f'Unable to open device #{STREAM_NUM}') 
+                    self.log_err(f'Unable to open device #{STREAM_NUM}') 
                     raise ValueError
-        self.logger.info(f'Found video stream {STREAM_NUM} after {num_tries} attempt(s)')
+        self.log_msg(f'Found video stream {STREAM_NUM} after {num_tries} attempt(s)', show_time=True)
     
         i = 0
         while True:
@@ -82,6 +106,12 @@ class TechnicianUI():
                    #'sum':np.sum(img),
                    'img':image_np}
     
+    # Target area for mouse movements
+    # Format:  [[y1, x1], [y2,x2]]
+    def set_targ_rect(self, targ_rect):
+        self.targ_rect = targ_rect
+        self.targ_h = targ_rect[1][0] - targ_rect[0][0] + 1
+        self.targ_w = targ_rect[1][1] - targ_rect[0][1] + 1
 
     def evaluator(self, 
                   proc_num, 
@@ -96,20 +126,13 @@ class TechnicianUI():
         def inc_res(key, msg=None):
             loc_res[key] += 1
             if msg:
-                log_msg(msg.format(loc_res[key]))
+                self.log_msg(msg.format(loc_res[key]))
             return loc_res[key]
             
-        def log_msg(msg):
-            self.logger.info(f'#{proc_num}: {msg}')
-            
-        def log_err(msg):
-            log_msg(f'Error:  {msg}')
-            #loc_res['errors'].append(msg)
-        
         # -------------------
         # Initialize model
         # -------------------
-        log_msg('Starting')
+        self.log_msg('Starting', show_time=True)
         interpreter = tf.lite.Interpreter(model_path=args.model_file)
         interpreter.allocate_tensors()
     
@@ -126,50 +149,78 @@ class TechnicianUI():
             'num_iter' : 0,
             'no_data' : 0,
             'same_img' : 0,
-            'images_proc' : [],
+            # 'images_proc' : [],
             'num_proc' : 0,
-            'errors' : [],
+            # 'errors' : [],
             'status' : 'Initializing'
             }
     
-        log_msg('Model initialized')
+        self.log_msg('Model initialized', show_time=True)
+
+
+        # ======================================================
+        # Poll for data, and when found, process against model
+        #
+        # status = 'avail' => Main procedure can update input_data with new data
+        #        = 'data_given' => Main procedure set input_data and will not give more
+        #        = 'running' => Received data and is processing it
+        #
+        # status lifecycle:  avail -> data_given -> running -> avail
+        # ======================================================
         expected_keys = set(['img_num', 'img'] )
-        loc_res['status'] = 'running'
+        loc_res['status'] = status.value
         cur_img_num = -1
         cur_iter = 0
         while True:
             if cmd.value == 'stop':
-                log_msg(f'Stopping')
+                self.log_msg(f'Stopping')
                 break
             cur_iter = inc_res('num_iter')
-            #if cur_iter % 1000 == 0:
-            #    log_msg(f"Iteration {cur_iter}.  Cmd={cmd.value}")
-            #    self.logger.info(f'Input data = {input_data}')
-    
-            try:
-                if not input_data:
-                    pass
-            except:
-                log_err('Error:  Input data={input_data}')
-            if input_data is None or not input_data:
-                inc_res('no_data')
+            if cur_iter % 1000 == 0:
+                self.log_debug(f'Iteration={cur_iter}')
+            
+            # Wait for status.value = 'data_given'
+            # TODO Would a queue be better?
+            #      - More efficient than a 'while True' loop
+            #      - avoid more concurrency issues between status and input_data
+            if status.value == 'avail':
+                time.sleep(0.001)
                 continue
-    
+            
+            if cur_iter % 1000 == 0:
+                self.log_debug(f"Iteration {cur_iter}.  Status={status.value}")
+
+            # ----------------------
+            # Get input data
+            # ----------------------
+            good_data = False
             try:
                 input_lock.acquire()
+                if input_data is None or not input_data:
+                    inc_res('no_data')
+                    continue
                 diff = expected_keys.symmetric_difference(set(list(input_data.keys())))
                 if len(diff) > 0:
-                    log_err(f'Input missing keys {diff}.  Input={input_data}.')
+                    self.log_err(f'Input missing keys {diff}.  Input={input_data}.')
                     continue
+                good_data = True
                 img_num = input_data['img_num']
                 #img_size = input_data['img_size']
                 img = input_data['img']
-                if img is None:
+                if img is None or len(img) == 0:
                     continue
                 #img_sum = input_data['sum']
+            except Exception as e:
+                self.log_err('Error:  Msg={e}.  Input data={input_data}')
             finally:
                 input_lock.release()
+            if not good_data:
+                continue
+            self.log_debug(f"Iteration {cur_iter}.  Img_num={img_num}")
                 
+            # ----------------------
+            # Evaluate data using the model
+            # ----------------------
             good_boxes = False
             boxes = []
             classes = []
@@ -178,31 +229,34 @@ class TechnicianUI():
                 if img_num == cur_img_num:
                     inc_res('same_img')
                     continue
-                # If img_num in result > input img_num, don't evaluate
-                if ('img_num' in results and 
-                    not results['img_num'] is None 
-                    and results['img_num'] > img_num
-                    ):
-                    continue
+                # If img_num in results > input img_num, don't evaluate
+                # Don't lock results.  If error (e.g. results has no key 'img_num'), just continue with evaluating
+                try:
+                    results_img_num = results['img_num']
+                    if results_img_num > img_num:
+                        self.log_debug(f"Skipping img_num={img_num}.  Results image is fresher #={results_img_num}")
+                        continue
+                except:
+                    pass
     
-                if img_num in loc_res['images_proc']:
-                    log_err(f'Input image number is {img_num} already processed and is not the current image {cur_img_num}.  Iter={cur_iter}')
-                    continue
+                # if img_num in loc_res['images_proc']:
+                #     self.log_err(f'Input image number is {img_num} already processed and is not the current image {cur_img_num}.  Iter={cur_iter}')
+                #     continue
                 cur_img_num = img_num
                 # if img_size != img.size:
-                #     log_err(f'Image size {img.size} not equal to expected {img_size}')
+                #     self.log_err(f'Image size {img.size} not equal to expected {img_size}')
                 #     continue
                 # if img_sum != np.sum(img):
-                #     log_err(f'Image size {np.sum(img)} not equal to expected {img_sum}')
+                #     self.log_err(f'Image size {np.sum(img)} not equal to expected {img_sum}')
                 #     continue
     
                 # -----------------------------
                 # Process image
                 # -----------------------------
-                #log_msg(f'Working on img {img_num}')
+                self.log_debug(f'Working on img {img_num}')
                 status.value = 'running'
                 inc_res('num_proc')
-                loc_res['images_proc'].append(img_num)
+                # loc_res['images_proc'].append(img_num)
     
                 # Output of quantized COCO SSD MobileNet v1 model
                 #https://www.tensorflow.org/lite/models/object_detection/overview#starter_model
@@ -234,8 +288,8 @@ class TechnicianUI():
                 # add N dim
                 model_input_data = np.expand_dims(image_np_resized, axis=0)
         
-        #  if floating_model:
-        #    model_input_data = (np.float32(input_data) - args.input_mean) / args.input_std
+                #  if floating_model:
+                #    model_input_data = (np.float32(input_data) - args.input_mean) / args.input_std
         
                 interpreter.set_tensor(input_details[0]['index'], model_input_data)
                 
@@ -244,19 +298,42 @@ class TechnicianUI():
                 output_boxes = self.get_output(interpreter, output_details, 0)
                 class_ids = self.get_output(interpreter, output_details, 1)
                 scores_orig = self.get_output(interpreter, output_details, 2)
-        
-                good_entries = scores_orig >= THRESHOLD
-        
-                classes = class_ids[good_entries]
-                scores = scores_orig[good_entries]
-    
-                boxes = [[round(y1*orig_height),
-                          round(x1*orig_width),
-                          round(y2*orig_height),
-                          round(x2*orig_width)]
-                         for [y1,x1,y2,x2] in output_boxes[good_entries]]
                 
-                boxes = np.array(boxes).astype(int)
+                self.log_debug(f'output_boxes0={output_boxes[0]}, class_ids0={class_ids[0]}, scores_orig0={scores_orig[0]}')
+        
+                # Assume only one Pointer Tip = class 0
+                #good_entries = (scores_orig >= THRESHOLD)
+                
+                # The following seems amazing, but needs more analysis
+                # https://stackoverflow.com/a/50241538/11262633
+                # mask = S == 1
+                # ind_local = np.argmax(X[mask])
+                # G = np.ravel_multi_index(np.where(mask), mask.shape)
+                # ind_global = np.unravel_index(G[ind_local], mask.shape)
+                # return ind_global
+                mask = (class_ids == 0) & (scores_orig >= THRESHOLD)
+                if mask.any():
+                    ind = np.arange(len(class_ids))
+                    best_0_loc = np.argmax(scores_orig[mask])  # index local to class_id[mask]
+                    best_0 = ind[mask][best_0_loc]  # index to class_id 
+        
+                    classes = np.array([class_ids[best_0]]).astype(int)
+                    scores = np.array([scores_orig[best_0]])
+        
+                    self.log_debug(f'# mask={sum(mask)}, best_0={best_0}, output_boxes_best={output_boxes[best_0]}, classes={classes}, scores={scores}')
+                    # boxes = [[round(y1*orig_height),
+                    #           round(x1*orig_width),
+                    #           round(y2*orig_height),
+                    #           round(x2*orig_width)]
+                    #          for [y1,x1,y2,x2] in output_boxes[best_0]]
+                    [y1,x1,y2,x2] = output_boxes[best_0]
+                    boxes = [[round(y1*orig_height),
+                              round(x1*orig_width),
+                              round(y2*orig_height),
+                              round(x2*orig_width)]]
+                    
+                    boxes = np.array(boxes).astype(int)
+
                 good_boxes = len(boxes) > 0
                 
                 eval_end_ns = time.time_ns()
@@ -272,15 +349,16 @@ class TechnicianUI():
                             msg += f'Max score={max(scores_orig)}'
                         else:
                             msg += f'No scores found'
-                    self.logger.info(msg + f'. Eval time={eval_ms} ms.')
+                    self.log_msg(msg + f'. Eval time={eval_ms} ms.')
     
                 #boxes = [f'#{proc_num}:{img_num} x1','{img_num} y1', '{img_num} x2', '{img_num} y2']
-                #log_msg(f'Processed image {img_num}')
+                #self.log_msg(f'Processed image {img_num}')
             except Exception as e:
-                self.logger.info(traceback.print_exc())
-                log_err(f'Error {e}')
+                self.log_err(f'Error {e}')
+                self.log_msg(traceback.print_exc())
             finally:
                 if status.value == 'running':
+                    # TODO Use a dict to set status.value to ensure valid values
                     status.value = 'avail'
                     results_lock.acquire()
                     if (not 'img_num' in results or 
@@ -295,7 +373,7 @@ class TechnicianUI():
                     results_lock.release()
             #break
         status.value = 'stopped'
-        log_msg('Exiting')
+        self.log_msg('Exiting')
     
     
     
@@ -310,8 +388,8 @@ class TechnicianUI():
             #win32api.SetCursorPos((targ_x,targ_y))
         
         def map_to_targ(rel_x, rel_y):
-            targ_x = (rel_x / self.src_w * targ_w + targ_rect[0][1]) * scale_factor
-            targ_y = (rel_y / self.src_h * targ_h + targ_rect[0][0]) * scale_factor
+            targ_x = (rel_x / self.src_w * self.targ_w + self.targ_rect[0][1]) * self.scale_factor
+            targ_y = (rel_y / self.src_h * self.targ_h + self.targ_rect[0][0]) * self.scale_factor
             self.logger.info(f'targ_x,targ_y={targ_x,targ_y}')
             return round(targ_x), round(targ_y)
         
@@ -328,6 +406,7 @@ class TechnicianUI():
         #labels = load_labels(args.label_file)
         category_index = {0:{'name':'Pointer Tip'}}
     
+        self.log_msg('Initializing multiprocessing environment', show_time=True)
         with mp.Manager() as manager:
             # One set of results for all processes
             results = manager.dict()
@@ -335,6 +414,8 @@ class TechnicianUI():
             # Set up shared values dictionary - svd
             svd = dict()
             for i in range(num_processes):
+                # TODO Pass process the class TechnicianUI.  First set it up with an initizlized model, and possibly other data currently passed as parameters
+                #      Need to determine if it is possible/desirable -- will each process get a copy of the class instance, or will changes to class attributes in one process be seen by other processes?
                 sv = {'input_data': manager.dict(),
                       'cmd': manager.Value('s','run'),
                       'status': manager.Value('s','avail'),
@@ -347,6 +428,7 @@ class TechnicianUI():
             # -------------------------------
             # Process images
             # ------------------------------
+            self.log_msg('Beginning to process images', show_time=True)
             start_time = time.time()
             num_images = 0
             prev_res_boxes = []
@@ -364,6 +446,7 @@ class TechnicianUI():
                         #self.logger.info(f'Img dict={img_dict.keys()}')
                         for k in img_dict:
                             sv['input_data'][k] = img_dict[k]
+                        sv['status'].value = 'data_given'
                         sv['input_lock'].release()
                         break
                     
@@ -396,8 +479,9 @@ class TechnicianUI():
                     num_images = 0
     
                 image_np = img_dict['img']
-                self.src_h = image_np.shape[0]
-                self.src_w = image_np.shape[1]
+                if not image_np is None:
+                    self.src_h = image_np.shape[0]
+                    self.src_w = image_np.shape[1]
     
                 good_boxes = (len(res_classes) > 0 and len(res_scores) > 0 and len(res_boxes) > 0)
 
@@ -414,7 +498,7 @@ class TechnicianUI():
                         vis_util.visualize_boxes_and_labels_on_image_array(
                             image_np,
                             res_boxes,
-                            res_classes.astype(int),
+                            res_classes,
                             res_scores,
                             category_index,
                             min_score_thresh=THRESHOLD,
@@ -466,24 +550,6 @@ class TechnicianUI():
 
 if __name__ == '__main__':
 
-    # ---------------------
-    # Set up mapping data
-    # ---------------------
-    #scale_factor = 2.0
-    scale_factor = 1.0
-    # Target area for mouse movements
-    # Format:  [[y1, x1], [y2,x2]]
-    targ_rect = [[46,12], [560, 610]]
-    targ_h = targ_rect[1][0] - targ_rect[0][0] + 1
-    targ_w = targ_rect[1][1] - targ_rect[0][1] + 1
-
-    # Launch UI    
-    app = QApplication(sys.argv)
-    win = demo_menu.MainWindow()
-    
-    win.show()
-    win.raise_()
-    
     parser = argparse.ArgumentParser()
     parser.add_argument(
           '-i',
@@ -513,14 +579,35 @@ if __name__ == '__main__':
           help='input standard deviation')
     args = parser.parse_args()
     
+    print(f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}: Process begins')
+
     # Python version: 3.7.4 (default, Aug  9 2019, 18:34:13) [MSC v.1915 64 bit (AMD64)]
     print(f'Python version: {sys.version}')
     #num_processes = mp.cpu_count()
-    num_processes = mp.cpu_count() - 1
-    #num_processes = 1
+    #num_processes = mp.cpu_count() - 1
+    num_processes = 1
     print(f'# processes {num_processes}')
     
     # main_seq()
     # TODO Load model in tu before passing to subprocesses
-    tu = TechnicianUI()
+    tu = TechnicianUI('info')
+
+    # ---------------------
+    # Set up mapping data
+    # ---------------------
+    #scale_factor = 2.0
+    tu.scale_factor = 1.0
+    # Target area for mouse movements
+    # Format:  [[y1, x1], [y2,x2]]
+    tu.set_targ_rect([[46,12], [560, 610]])
+
+    # Launch UI    
+    app = QApplication(sys.argv)
+    win = demo_menu.MainWindow(parent_class=tu)
+    
+    win.show()
+    win.raise_()
+    
+
+
     tu.main_par(args)
