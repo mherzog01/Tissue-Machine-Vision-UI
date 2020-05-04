@@ -16,8 +16,20 @@ from labelme.config import get_config
 from labelme.logger import logger
 from labelme.utils import newIcon
 
+import pickle
 
 def main(parent_class = None):
+    
+    # Hardcodes
+    label_file = r'C:\Tmp\Work1\labels.yaml'
+    flag_file = r'C:\Tmp\Work1\labelflags.yaml'
+    #'TEMP': 'C:\\Users\\mherzo\\AppData\\Local\\Temp'
+    input_dir = osp.join(os.getenv('TEMP'),'tissue_vision')
+    output_dir = input_dir
+    
+    if not osp.exists(input_dir):
+        os.mkdir(input_dir)
+    
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--version', '-V', action='store_true', help='show version'
@@ -31,11 +43,16 @@ def main(parent_class = None):
         choices=['debug', 'info', 'warning', 'fatal', 'error'],
         help='logger level',
     )
-    parser.add_argument('filename', nargs='?', help='image or label filename')
+    parser.add_argument(
+        'filename', 
+        nargs='?', 
+        help='image or label filename',
+        default=input_dir)
     parser.add_argument(
         '--output',
         '-O',
         '-o',
+        default=output_dir,
         help='output file or directory (if it ends with .json it is '
              'recognized as file, else as directory)'
     )
@@ -61,7 +78,7 @@ def main(parent_class = None):
         dest='auto_save',
         action='store_true',
         help='auto save',
-        default=argparse.SUPPRESS,
+        #default=argparse.SUPPRESS,
     )
     parser.add_argument(
         '--nosortlabels',
@@ -81,19 +98,23 @@ def main(parent_class = None):
         help='yaml string of label specific flags OR file containing json '
              'string of label specific flags (ex. {person-\d+: [male, tall], '
              'dog-\d+: [black, brown, white], .*: [occluded]})',  # NOQA
-        default=argparse.SUPPRESS,
+        # default=argparse.SUPPRESS,
+        default=flag_file,
     )
     parser.add_argument(
         '--labels',
         help='comma separated list of labels OR file containing labels',
-        default=argparse.SUPPRESS,
+        # default=argparse.SUPPRESS,
+        default=label_file,
     )
     parser.add_argument(
         '--validatelabel',
         dest='validate_label',
         choices=['exact'],
         help='label validation types',
-        default=argparse.SUPPRESS,
+        # default=argparse.SUPPRESS,
+        # action='store_true',
+        default='exact'
     )
     parser.add_argument(
         '--keep-prev',
@@ -178,6 +199,7 @@ def main(parent_class = None):
         filename=filename,
         output_file=output_file,
         output_dir=output_dir,
+        parent_class=parent_class,
     )
 
     if reset_config:
@@ -189,13 +211,27 @@ def main(parent_class = None):
     win.raise_()
     
     print(f'Window:  Pos {win.pos().x()}:{win.pos().y()}, Dim ({win.width()},{win.height()})')
-    #sys.exit(app.exec_())
 
     # TODO Get from win
     if not parent_class is None:
         #Maximized window (QT - x,y): 960,493 -- 1920, 986
         parent_class.set_targ_rect([[0,0],[986, 1920]])
         
+    return app, win
+
+class TestClass():
+    def __init__(self):
+        test_images_pickle = r'c:\tmp\video_input.pickle'
+        if osp.exists(test_images_pickle):
+            with open(test_images_pickle,'rb') as f:
+                image_list = pickle.load(f)
+                self.image_from_camera = image_list[0]
+                
+    def set_targ_rect(self, targ_rect):
+        self.targ_rect = targ_rect
+        
 # this main block is required to generate executable by pyinstaller
 if __name__ == '__main__':
-    main()
+    test_class = TestClass()
+    app, win = main(parent_class=test_class)
+    sys.exit(app.exec_())

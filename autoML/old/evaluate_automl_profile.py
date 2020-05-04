@@ -13,7 +13,7 @@ import traceback
 import argparse
 import tensorflow as tf # TF2
 import cv2
-from object_detection.utils import visualization_utils as vis_util
+#from object_detection.utils import visualization_utils as vis_util
 import datetime
 import pickle
 
@@ -60,14 +60,15 @@ class EvalAutoML():
     
     def get_images(self):
         
-        if False:
+        if True:
             with open(r'c:\tmp\video_input.pickle', 'rb') as f:
                 image_list = pickle.load(f)
-                for i, image_np in enumerate(image_list):
-                    yield {'img_num':i,
-                           #'img_size':image_np.size,
-                           #'sum':np.sum(img),
-                           'img':image_np}        
+                while True:
+                    for i, image_np in enumerate(image_list):
+                        yield {'img_num':i,
+                               #'img_size':image_np.size,
+                               #'sum':np.sum(img),
+                               'img':image_np}        
                 return
         #TODO Determine why this isn't getting set by the global variable
         STREAM_NUM = 1
@@ -240,16 +241,17 @@ class EvalAutoML():
             # Visualization of the results of a detection, or reapply old.
             if good_boxes:
                 try:
-                    vis_util.visualize_boxes_and_labels_on_image_array(
-                        image_np,
-                        cur_boxes,
-                        classes.astype(int),
-                        scores,
-                        category_index,
-                        min_score_thresh=THRESHOLD,
-                        #use_normalized_coordinates=True,
-                        use_normalized_coordinates=False,
-                        line_thickness=2)
+                   # vis_util.visualize_boxes_and_labels_on_image_array(
+                   #     image_np,
+                   #     cur_boxes,
+                   #     classes.astype(int),
+                   #     scores,
+                   #     category_index,
+                   #     min_score_thresh=THRESHOLD,
+                   #     #use_normalized_coordinates=True,
+                   #     use_normalized_coordinates=False,
+                   #     line_thickness=2)
+                   pass
                 except Exception as e:
                     print(f'Error calling visualizing boxes on image.  Error={e}')
                     print(traceback.print_exc())

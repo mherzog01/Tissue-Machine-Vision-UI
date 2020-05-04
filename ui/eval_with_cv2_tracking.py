@@ -33,7 +33,7 @@ import logging
 from importlib import reload
 import datetime
 import labelme__main__
-
+from os import path as osp
 
 def reload_labelme():
     print('Reloading labelme')
@@ -46,7 +46,19 @@ MAX_TRIES = 10
 #STREAM_NUM = 1
 
 # Model eval parameters
-THRESHOLD = 0.1
+THRESHOLD = 0.2
+
+class ImgProcStats():
+    def __init__(self):
+        self.start_time = time.time()
+        self.num_images = 0
+        self.num_detections = 0
+        self.num_results = 0 # Different results, may be null, when previously an object was detected
+        self.num_track_inits = 0
+        self.num_tracks = 0
+        self.num_succ_tracks = 0
+        self.num_no_tracks = 0
+        
 
 class TechnicianUI():
     
@@ -60,6 +72,9 @@ class TechnicianUI():
         else:
             log_level = logging.INFO
         self.logger = mp.log_to_stderr(log_level)
+        
+    def fmt_cur_datetime(self):
+        return f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}'
     
     def get_output(self, interpreter, output_details, key):
         output = interpreter.get_tensor(output_details[key]['index'])    
@@ -69,7 +84,7 @@ class TechnicianUI():
     def log_msg(self, msg, show_time=False):
         # self.logger.info(f'#{proc_num}: {msg}')
         if show_time:
-            time_str = f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}: '
+            time_str = self.fmt_cur_datetime() + ': '
         else:
             time_str = ''
         self.logger.info(f'{time_str}{msg}')
@@ -352,7 +367,7 @@ class TechnicianUI():
                 eval_ms = round((eval_end_ns - eval_start_ns) / 1000000)
                 interp_invoke_ms = round((interp_invoke_end - interp_invoke_start) / 1000000)
                 
-                if True:
+                if False:
                     msg = f'Img {img_num}, '
                     if good_boxes:
                         msg += f'Max score={max(scores)}, boxes={boxes}'
@@ -382,6 +397,8 @@ class TechnicianUI():
                        results['boxes'] = boxes
                        results['classes'] = classes
                        results['scores'] = scores
+                       # TODO Determine if storing image is a performance hit.  If so, store in calling procedure and reference via image number
+                       results['image'] = img
                        #self.logger.info(f'Wrote results={results}')
                     results_lock.release()
             #break
@@ -396,9 +413,32 @@ class TechnicianUI():
         win.show()
         win.raise_()
 
-        
+    # tf:  [y_left, x_left, y_right, x_right]
+    # cv2: [xmin, ymin, w, h]
+    # https://stackoverflow.com/questions/49301389/boundingbox-defintion-for-opencv-object-tracking
+    def tf_to_cv2_box(self, tf_box):
+        [y_left, x_left, y_right, x_right] = tf_box
+        xmin = x_left
+        ymin = y_left
+        w = x_right - x_left
+        h = y_right - y_left
+        cv2_box = (xmin, ymin, w, h)
+        return cv2_box
     
+    def cv2_to_tf_box(self, cv2_box):
+        [xmin, ymin, w, h] = cv2_box
+        x_left = xmin
+        y_left = ymin
+        x_right = x_left + w
+        y_right = y_left + h
+        tf_box = [y_left, x_left, y_right, x_right]
+        return tf_box
     
+
+    def get_new_tracker(self):
+        return cv2.TrackerTLD_create()
+
+
     
     def main_par(self, cmd_line_args):
     
@@ -412,7 +452,7 @@ class TechnicianUI():
         def map_to_targ(rel_x, rel_y):
             targ_x = (rel_x / self.src_w * self.targ_w + self.targ_rect[0][1]) * self.scale_factor
             targ_y = (rel_y / self.src_h * self.targ_h + self.targ_rect[0][0]) * self.scale_factor
-            self.logger.info(f'targ_x,targ_y={targ_x,targ_y}')
+            #self.logger.info(f'targ_x,targ_y={targ_x,targ_y}')
             return round(targ_x), round(targ_y)
         
         def get_center(box):
@@ -427,6 +467,8 @@ class TechnicianUI():
         #TODO Don't hardcode labels
         #labels = load_labels(args.label_file)
         category_index = {0:{'name':'Pointer Tip'}}
+        
+        tracker = self.get_new_tracker()
     
         self.log_msg('Initializing multiprocessing environment', show_time=True)
         with mp.Manager() as manager:
@@ -451,16 +493,17 @@ class TechnicianUI():
             # Process images
             # ------------------------------
             self.log_msg('Beginning to process images', show_time=True)
-            start_time = time.time()
-            num_images = 0
+            ips = ImgProcStats()
+            
             prev_res_boxes = []
             res_boxes = []
             res_classes = []
             res_scores = []
+            tracker_init = False
             for img_dict in self.get_images():
                 
                 # Give image to a worker if one is available
-                num_images += 1
+                ips.num_images += 1
                 for i in range(num_processes):
                     sv = svd[i]
                     if sv['status'].value == 'avail':
@@ -483,22 +526,18 @@ class TechnicianUI():
                     boxes_changed = True
                     #self.logger.info(results)
                     prev_res_boxes = res_boxes                
-                    if 'img_num' in results:
-                        res_img_num = results['img_num']
-                    if 'classes' in results:
-                        res_classes = results['classes']
-                    if 'scores' in results:
-                        res_scores = results['scores']
+                    # if 'img_num' in results:
+                    #     res_img_num = results['img_num']
+                    # if 'classes' in results:
+                    #     res_classes = results['classes']
+                    # if 'scores' in results:
+                    #     res_scores = results['scores']
+                    res_img_num = results['img_num']
+                    res_classes = results['classes']
+                    res_scores = results['scores']
+                    res_img = results['image']
+                    ips.num_results += 1
                 results_lock.release()
-    
-                cur_time = time.time()
-                time_diff = cur_time - start_time
-                disp_stat = False
-                if time_diff > 5:
-                    disp_stat = True
-                    start_time = cur_time
-                    img_per_sec = num_images/time_diff
-                    num_images = 0
     
                 self.image_from_camera = img_dict['img']
                 self.image_num = img_dict['img_num']
@@ -511,33 +550,89 @@ class TechnicianUI():
                               len(res_scores) > 0 and 
                               len(res_boxes) > 0)
 
-                if disp_stat:
-                    self.logger.info(f'good_boxes={good_boxes}.  res_img_num={res_img_num}, res_boxes={res_boxes},  new_classes={res_classes},  new_scores={res_scores},  Boxes changed={boxes_changed}')
-                    self.logger.info(f'Images/sec = {img_per_sec:0.0f}')
+                # Update tracker with the detected bounding box
+                # TODO Maintain history of boxes.  Average centers and ignore outliers
+                if boxes_changed and good_boxes:
+                    ips.num_detections += 1
+                    bbox_cv2 = self.tf_to_cv2_box(res_boxes[0])
+                    tracker = self.get_new_tracker()
+                    time.sleep(0.02)
+                    tracker_init = tracker.init(res_img, bbox_cv2)
+                    if tracker_init:
+                        ips.num_track_inits += 1
+                    else:
+                        cv2.imwrite(r'c:\tmp\img_test2.jpg',res_img)
+                        debug_track_init_img=r'c:\tmp\img_test.jpg'
+                        # if not osp.exists(debug_track_init_img):
+                        res_img_debug = res_img.copy()
+                        p1 = (int(bbox_cv2[0]), int(bbox_cv2[1]))
+                        p2 = (int(bbox_cv2[0] + bbox_cv2[2]), int(bbox_cv2[1] + bbox_cv2[3]))
+                        cv2.rectangle(res_img_debug, p1, p2, (255,0,0), 2, 1)
+                        cv2.putText(res_img_debug, f"Couldn't init tracker.  Bbox={bbox_cv2}", (50,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
+                        cv2.imwrite(debug_track_init_img,res_img_debug)
+                        #self.logger.info(f'res_img = {res_img}')
+                        
+                
+                ok = False
+                if tracker_init:
+                    ips.num_tracks += 1
+                    ok, bbox_cv2 = tracker.update(image_np)
+                    # self.logger.info(f'Getting tracking info.  Result={ok}, bbox={bbox_cv2}')
+                if ok:
+                    # Tracking success
+                    ips.num_succ_tracks += 1
+                    p1 = (int(bbox_cv2[0]), int(bbox_cv2[1]))
+                    p2 = (int(bbox_cv2[0] + bbox_cv2[2]), int(bbox_cv2[1] + bbox_cv2[3]))
+                    cv2.rectangle(image_np, p1, p2, (255,0,0), 2, 1)
+                else :
+                    # Tracking failure
+                    ips.num_no_tracks += 1
+                    cv2.putText(image_np, "Tracking failure detected", (100,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
+
+                cur_time = time.time()
+                time_diff = cur_time - ips.start_time
+                # disp_stat = False
+                if time_diff > 5:
+                    # disp_stat = True
+    
+                    img_per_sec = ips.num_images/time_diff
+                    #self.logger.info(f'good_boxes={good_boxes}.  res_img_num={res_img_num}, res_boxes={res_boxes},  new_classes={res_classes},  new_scores={res_scores},  Boxes changed={boxes_changed}')
+                    msg = f'Images/sec = {img_per_sec:0.0f}.  # img={ips.num_images}'
+                    msg += f', track inits={ips.num_track_inits}'
+                    msg += f', tracks={ips.num_tracks}'
+                    msg += f', succ tracks={ips.num_succ_tracks}'
+                    msg += f', no tracks={ips.num_no_tracks}'
+                    msg += f', results={ips.num_results}'
+                    msg += f', # detects={ips.num_detections}'
+                    self.log_msg(msg, show_time=True)
+
+                    # Reset counters
+                    ips.__init__()
 
                 # -----------------------------------------------------------------
                 # Visualization of the results of a detection, or reapply old.
                 # Also, if the box changed, move cursor to that spot
                 # -----------------------------------------------------------------
-                if good_boxes:
-                    try:
-                        vis_util.visualize_boxes_and_labels_on_image_array(
-                            image_np,
-                            res_boxes,
-                            res_classes,
-                            res_scores,
-                            category_index,
-                            min_score_thresh=THRESHOLD,
-                            #use_normalized_coordinates=True,
-                            use_normalized_coordinates=False,
-                            line_thickness=2)
-                    except Exception as e:
-                        self.logger.info(f'Error calling visualizing boxes on image.  Error={e}')
-                        self.logger.info(traceback.print_exc())
-                    if boxes_changed:
-                        self.logger.info(f'res_boxes={res_boxes}')
+                if ok:
+                    # try:
+                    #     vis_util.visualize_boxes_and_labels_on_image_array(
+                    #         image_np,
+                    #         res_boxes,
+                    #         res_classes,
+                    #         res_scores,
+                    #         category_index,
+                    #         min_score_thresh=THRESHOLD,
+                    #         #use_normalized_coordinates=True,
+                    #         use_normalized_coordinates=False,
+                    #         line_thickness=2)
+                    # except Exception as e:
+                    #     self.logger.info(f'Error calling visualizing boxes on image.  Error={e}')
+                    #     self.logger.info(traceback.print_exc())
+                    if True: #boxes_changed:
+                        #self.logger.info(f'res_boxes={res_boxes}')
                         if True:
-                            xc, yc = get_center(res_boxes[0]) 
+                            tf_box = self.cv2_to_tf_box(bbox_cv2)
+                            xc, yc = get_center(tf_box) 
                             xt, yt = map_to_targ(xc, yc)
                             if xt is None or yt is None:
                                 self.logger.info(f'Can''t move cursor:  xt,yt None {xt},{yt}')
@@ -564,14 +659,16 @@ class TechnicianUI():
                 #     #https://stackoverflow.com/questions/33319485/how-to-simulate-a-mouse-click-without-interfering-with-actual-mouse-in-python
                 #     win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN,0,0)
                 #     win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP,0,0)
-                    
-            #TODO Add GUI to draw picture and rectangle
+
+
+            # Clean up                    
             self.logger.info('In main:  stopping')
             for i in range(num_processes):
                 sv = svd[i]
                 sv['cmd'].value = 'stop'
                 sv['process'].join()
             self.logger.info('In main:  Stopped')
+            
 
 
 if __name__ == '__main__':
@@ -640,3 +737,8 @@ if __name__ == '__main__':
 
 
     tu.main_par(args)
+    for w in app.topLevelWindows():
+        w.close()
+    # https://stackoverflow.com/questions/12034393/import-side-effects-on-logging-how-to-reset-the-logging-module
+    logging.shutdown()
+        

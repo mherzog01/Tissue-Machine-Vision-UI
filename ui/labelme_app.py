@@ -7,6 +7,8 @@ import pathlib
 import re
 import webbrowser
 import pandas as pd
+import time
+import shutil
 
 import imgviz
 from qtpy import QtCore
@@ -35,6 +37,12 @@ from labelme.widgets import ZoomWidget
 
 import PIL 
 from PIL import Image
+import traceback
+
+import win32con
+import win32api
+
+#from modeless_confirm import ModelessConfirm
 
 #import cProfile
 
@@ -119,6 +127,7 @@ class MainWindow(QtWidgets.QMainWindow):
         output=None,
         output_file=None,
         output_dir=None,
+        parent_class=None,
     ):
         print('In custom version of app.py')
         if output is not None:
@@ -140,6 +149,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dirty = False
 
         self._noSelectionSlot = False
+        
+        self.parent_class = parent_class
 
         # Main widgets and related state.
         self.labelDialog = LabelDialog(
@@ -309,7 +320,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, self.file_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.annotator_dock)
 
-        # Actions
+        # =====================
+        # Action definition begin
+        # ---------------------
         action = functools.partial(utils.newAction, self)
         shortcuts = self._config['shortcuts']
         quit = action(self.tr('&Quit'), self.close, shortcuts['quit'], 'quit',
@@ -428,6 +441,26 @@ class MainWindow(QtWidgets.QMainWindow):
             enabled=True
         )
 
+        takePicture = action(
+            self.tr('Take Picture'),
+            self.takePicture,
+            None,
+            'camera_icon',
+            self.tr('Take picture for annotation'),
+            checkable=False,
+            enabled=True,
+        )
+        
+        nest = action(
+            self.tr('Nest'),
+            self.nest,
+            None,
+            'nesting',
+            self.tr('Create cut plan based on requirements and defects'),
+            checkable=False,
+            enabled=True,
+        )
+        
         # -----------------------------------------------
         # User extensions - End
         # ===============================================
@@ -605,6 +638,10 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         fill_drawing.trigger()
 
+        # ---------------------
+        # Action definition end
+        # =====================
+
         # Label list context menu.
         labelMenu = QtWidgets.QMenu()
         utils.addActions(labelMenu, (edit, delete))
@@ -685,6 +722,8 @@ class MainWindow(QtWidgets.QMainWindow):
             launchExternalViewer=launchExternalViewer,
             exportByLot=exportByLot,
             groundTruthBuilderMode=groundTruthBuilderMode,
+            takePicture=takePicture,
+            nest=nest,
         )
 
         self.canvas.edgeSelected.connect(self.canvasShapeEdgeSelected)
@@ -770,12 +809,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tools = self.toolbar('Tools')
         # Menu buttons on Left
         self.actions.tool = (
-            open_,
-            opendir,
-            openNextImg,
-            openPrevImg,
+            takePicture,
+            nest,
             save,
-            verifyFile,
             None,
             createMode,
             editMode,
@@ -793,7 +829,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage(self.tr('%s started.') % __appname__)
         self.statusBar().show()
 
-        if output_file is not None and self._config['auto_save']:
+        if (output_file is not None and
+            (filename is None or output_file != filename) and
+            self._config['auto_save']
+            ):
             logger.warn(
                 'If `auto_save` argument is True, `output_file` argument '
                 'is ignored and output filename is automatically '
@@ -801,6 +840,10 @@ class MainWindow(QtWidgets.QMainWindow):
             )
         self.output_file = output_file
         self.output_dir = output_dir
+
+        # Set up image acquisition
+        self.acquired_image = osp.join(self.output_dir,'cur_image.jpg')
+        self.del_cur_image()
 
         # Application state.
         self.image = QtGui.QImage()
@@ -861,6 +904,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.zoomWidget.valueChanged.connect(self.paintCanvas)
 
         self.populateModeActions()
+
+        shortcut = QtWidgets.QShortcut(QtGui.QKeySequence('F2'), self)
+        shortcut.activated.connect(self.simulate_click)
 
         # self.firstStart = True
         # if self.firstStart:
@@ -2156,4 +2202,61 @@ class MainWindow(QtWidgets.QMainWindow):
         msg += f'Last opened dir={self.lastOpenDir}\n'
         user_extns.dispMsgBox(msg)
     
-    
+    def takePicture(self):
+        if self.parent_class is None:
+            print('Unable to acquire image - not linked to image acquisition module')
+            return
+        try:
+            # mc = ModelessConfirm('Remove the pointer from the tissue.  To take a picture, click the foot pedal or mouse.', title='Taking Picture', window_pos=QtCore.QPoint(100,200))
+            # mc.show()
+            # mc.raise_()
+            # result = mc.exec_()
+            msg = 'Remove the pointer from the tissue.  To take a picture, click the foot pedal or mouse.'
+            msgBox = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Information,'Acquiring picture', msg)
+            msgBox.setStandardButtons(QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Cancel)
+            result = msgBox.exec()
+            if result != QtWidgets.QMessageBox.Ok:
+                return
+            
+            # The dialog box blocks processing of the model, so after closing the box,
+            # give the process time to acquire another image
+
+            demo = True
+            if not demo:
+                print(f'Image # before sleep={self.parent_class.image_num}')
+                time.sleep(1)
+                print(f'Image # after sleep={self.parent_class.image_num}')
+                image_from_camera = self.parent_class.image_from_camera
+                if image_from_camera is None:
+                    self.errorMessage("Error acquiring image", "Image from acquisition moudle is not available.  Please contact your administrator.")                
+                    return
+                img = Image.fromarray(image_from_camera)
+                outfile = self.acquired_image
+                # Write file
+                img.save(outfile,'JPEG')
+            else:
+                outfile = self.acquired_image
+                shutil.copyfile(r'c:\tmp\work1\20200211-143020-Img.bmp', outfile)
+            self.loadFile(outfile)
+            self.toggleDrawMode(False, createMode='polygon')
+            #self.createMode()
+        except Exception as e:
+            print(traceback.print_exc())
+            print(f'Error acquiring image.  Error={e}.')
+
+
+    def del_cur_image(self):
+        if osp.exists(self.acquired_image):
+            os.remove(self.acquired_image)
+        
+
+    def nest(self):
+        msgBox = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Information, 'Nesting', 'Nesting not yet implemented')
+        result = msgBox.exec()
+        
+
+
+    def simulate_click(self):
+        #https://stackoverflow.com/questions/33319485/how-to-simulate-a-mouse-click-without-interfering-with-actual-mouse-in-python
+        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN,0,0)
+        win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP,0,0)        
