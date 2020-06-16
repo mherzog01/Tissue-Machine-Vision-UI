@@ -63,6 +63,16 @@ class ImgProcStats():
 class TechnicianUI():
     
     def __init__(self, log_level_txt='info'):
+        print(f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}: In TechnicianUI - init')
+    
+        # Python version: 3.7.4 (default, Aug  9 2019, 18:34:13) [MSC v.1915 64 bit (AMD64)]
+        print(f'Python version: {sys.version}')
+        #num_processes = mp.cpu_count()
+        #num_processes = mp.cpu_count() - 1
+        #num_processes = mp.cpu_count() - 2
+        self.num_processes = 1
+        print(f'# processes {self.num_processes}')
+        
         if log_level_txt == 'debug':
             log_level = logging.DEBUG
         elif log_level_txt == 'info':
@@ -477,7 +487,7 @@ class TechnicianUI():
             results_lock = manager.Lock()
             # Set up shared values dictionary - svd
             svd = dict()
-            for i in range(num_processes):
+            for i in range(self.num_processes):
                 # TODO Pass process the class TechnicianUI.  First set it up with an initizlized model, and possibly other data currently passed as parameters
                 #      Need to determine if it is possible/desirable -- will each process get a copy of the class instance, or will changes to class attributes in one process be seen by other processes?
                 sv = {'input_data': manager.dict(),
@@ -504,7 +514,7 @@ class TechnicianUI():
                 
                 # Give image to a worker if one is available
                 ips.num_images += 1
-                for i in range(num_processes):
+                for i in range(self.num_processes):
                     sv = svd[i]
                     if sv['status'].value == 'avail':
                         sv['input_lock'].acquire()
@@ -663,7 +673,7 @@ class TechnicianUI():
 
             # Clean up                    
             self.logger.info('In main:  stopping')
-            for i in range(num_processes):
+            for i in range(self.num_processes):
                 sv = svd[i]
                 sv['cmd'].value = 'stop'
                 sv['process'].join()
@@ -672,6 +682,8 @@ class TechnicianUI():
 
 
 if __name__ == '__main__':
+
+    print(f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}: In module __main__ - initializing')
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -702,16 +714,6 @@ if __name__ == '__main__':
           help='input standard deviation')
     args = parser.parse_args()
     
-    print(f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}: Process begins')
-
-    # Python version: 3.7.4 (default, Aug  9 2019, 18:34:13) [MSC v.1915 64 bit (AMD64)]
-    print(f'Python version: {sys.version}')
-    #num_processes = mp.cpu_count()
-    #num_processes = mp.cpu_count() - 1
-    #num_processes = mp.cpu_count() - 2
-    num_processes = 1
-    print(f'# processes {num_processes}')
-    
     # main_seq()
     # TODO Load model in tu before passing to subprocesses
     tu = TechnicianUI('info')
@@ -724,21 +726,26 @@ if __name__ == '__main__':
     # Target area for mouse movements
     # Format:  [[y1, x1], [y2,x2]]
     # -- will be set in labelme -- 
-    # tu.set_targ_rect([[46,12], [560, 610]])
+    tu.set_targ_rect([[46,12], [560, 610]])
 
     
-    # Launch UI in another process, so GUI can acquire images from the main process without blocking    
+    # --------------------
+    # Launch UI 
+    # --------------------
+    # Launch in another process, so GUI can acquire images from the main process without blocking    
     #mp.Process(target=tu.launch_gui, args=(tu,))
     # Keep it simple for the demo
     #tu.launch_gui()
-    app, win = labelme__main__.main(parent_class=tu)
-    win.show()
-    win.raise_()
-
+    # --------------------
+    #app, win = labelme__main__.main(parent_class=tu)
+    #win.show()
+    #win.raise_()
 
     tu.main_par(args)
-    for w in app.topLevelWindows():
-        w.close()
+    #for w in app.topLevelWindows():
+    #    w.close()
+    
     # https://stackoverflow.com/questions/12034393/import-side-effects-on-logging-how-to-reset-the-logging-module
     logging.shutdown()
+    print(f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}: In module __main__ - end')
         

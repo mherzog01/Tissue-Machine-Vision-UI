@@ -904,7 +904,8 @@ class MainWindow(QtWidgets.QMainWindow):
             
         # Launch pointer processor in a separate process to prevent blocking
         import multiprocessing as mp
-        self.pointer_proc = mp.Process(target=test_proc.run_test)
+        tc = test_proc.test_class()
+        self.pointer_proc = mp.Process(target=tc.run_test)
         self.pointer_proc.start()
 
         # Callbacks:
