@@ -42,6 +42,8 @@ import traceback
 import win32con
 import win32api
 
+import test_proc
+
 #from modeless_confirm import ModelessConfirm
 
 #import cProfile
@@ -899,6 +901,11 @@ class MainWindow(QtWidgets.QMainWindow):
         # make sure it runs in the background.
         if self.filename is not None:
             self.queueEvent(functools.partial(self.loadFile, self.filename))
+            
+        # Launch pointer processor in a separate process to prevent blocking
+        import multiprocessing as mp
+        self.pointer_proc = mp.Process(target=test_proc.run_test)
+        self.pointer_proc.start()
 
         # Callbacks:
         self.zoomWidget.valueChanged.connect(self.paintCanvas)
@@ -2252,8 +2259,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def nest(self):
         msgBox = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Information, 'Nesting', 'Nesting not yet implemented')
-        result = msgBox.exec()
-        
+        #result = msgBox.exec()
+        msgBox.exec()
+        self.pointer_proc.terminate()
+        time.sleep(1)
+        self.pointer_proc.close()
 
 
     def simulate_click(self):
