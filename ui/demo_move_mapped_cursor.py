@@ -86,7 +86,7 @@ targ_h = targ_rect[1][1] - targ_rect[0][1] + 1
 #cur_rect_center = src_offset(*win32api.GetCursorPos())
 #targ_x, targ_y = map_to_targ(*cur_rect_center)
 
-use_camera = False
+use_camera = True
 if use_camera:
     STREAM_NUM = 1
     cap = cv2.VideoCapture(STREAM_NUM)  # Change only if you have more than one webcams

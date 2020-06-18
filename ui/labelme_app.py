@@ -41,8 +41,11 @@ import traceback
 
 import win32con
 import win32api
+from pynput import keyboard
 
-import test_proc
+from eval_with_cv2_tracking import TechnicianUI
+#TODO Instead of argparse and related in this module, get values from calling program
+import argparse
 
 #from modeless_confirm import ModelessConfirm
 
@@ -902,23 +905,75 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.filename is not None:
             self.queueEvent(functools.partial(self.loadFile, self.filename))
             
+        #===================================================================
         # Launch pointer processor in a separate process to prevent blocking
+        #TODO clean up process - get args from calling program
+        #TODO clean up process - set up multiprocessing pool here - don't create a process which then creates a pool
         import multiprocessing as mp
-        tc = test_proc.test_class()
-        self.pointer_proc = mp.Process(target=tc.run_test)
+
+        parser = argparse.ArgumentParser()
+        parser.add_argument(
+              '-m',
+              '--model_file',
+              # default='/tmp/mobilenet_v1_1.0_224_quant.tflite',
+              default=r'C:\Users\mherzo\Documents\GitHub\tf-models\app\autoML\models\tflite-tissue_defect_ui_20200414053330\model.tflite',
+              help='.tflite model to be executed')
+        #TODO make model labels soft:  default=r'C:\Users\mherzo\Documents\GitHub\tf-models\app\ui_label_map.pbtxt',
+        parser.add_argument(
+              '--input_mean',
+              default=127.5, type=float,
+              help='input_mean')
+        parser.add_argument(
+              '--input_std',
+              default=127.5, type=float,
+              help='input standard deviation')
+        tracker_args = parser.parse_args()
+        
+        # main_seq()
+        # TODO Load model in tu before passing to subprocesses
+        self.tu = TechnicianUI('info')
+    
+        # ---------------------
+        # Set up mapping data
+        # ---------------------
+        #scale_factor = 2.0
+        self.tu.scale_factor = 1.0
+        # Target area for mouse movements
+        # Format:  [[y1, x1], [y2,x2]]
+        # -- will be set in labelme -- 
+        self.tu.set_targ_rect([[46,12], [560, 610]])
+    
+        self.pointer_proc = mp.Process(target=self.tu.main_par, args=(tracker_args,))
         self.pointer_proc.start()
+        #===================================================================
 
         # Callbacks:
         self.zoomWidget.valueChanged.connect(self.paintCanvas)
 
         self.populateModeActions()
 
-        shortcut = QtWidgets.QShortcut(QtGui.QKeySequence('F2'), self)
-        shortcut.activated.connect(self.simulate_click)
+        # -----------------------------------------------
+        # Set up hotkey to simulate mouse click
+        #
+        # TODO Turn off listener when exit from program.  Currently, it continues to run in a separate thread until the Python console is destroyed
+        # shortcut = QtWidgets.QShortcut(QtGui.QKeySequence('F2'), self)
+        # shortcut.setContext(QtCore.Qt.ApplicationShortcut)
+        # shortcut.activated.connect(self.simulate_click)
+        self.listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)            
+        self.listener.start()
 
         # self.firstStart = True
         # if self.firstStart:
         #    QWhatsThis.enterWhatsThisMode()
+
+    # https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key        
+    def on_press(self, key):
+        if key == keyboard.Key.f2:
+            #print(f'{datetime.datetime.now():%H:%M:%S} F2')   
+            self.simulate_click()
+
+    def on_release(self, key):
+        pass        
 
     def menu(self, title, actions=None):
         menu = self.menuBar().addMenu(title)

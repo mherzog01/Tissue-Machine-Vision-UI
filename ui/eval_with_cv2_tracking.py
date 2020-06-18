@@ -32,13 +32,14 @@ import logging
 #import test_module
 from importlib import reload
 import datetime
-import labelme__main__
+#import labelme__main__
 from os import path as osp
+from collections import deque
 
-def reload_labelme():
-    print('Reloading labelme')
-    reload(labelme__main__)
-    print('Reload complete')
+# def reload_labelme():
+#     print('Reloading labelme')
+#     reload(labelme__main__)
+#     print('Reload complete')
 
 # Video stream parameters
 MAX_TRIES = 10
@@ -447,6 +448,8 @@ class TechnicianUI():
 
     def get_new_tracker(self):
         return cv2.TrackerTLD_create()
+        #return cv2.TrackerCSRT_create() -- poor tracking
+        #return cv2.TrackerMIL_create()
 
 
     
@@ -480,6 +483,8 @@ class TechnicianUI():
         
         tracker = self.get_new_tracker()
     
+        queue_size = 5
+        pt_queue = deque(maxlen=queue_size)
         self.log_msg('Initializing multiprocessing environment', show_time=True)
         with mp.Manager() as manager:
             # One set of results for all processes
@@ -643,7 +648,11 @@ class TechnicianUI():
                         if True:
                             tf_box = self.cv2_to_tf_box(bbox_cv2)
                             xc, yc = get_center(tf_box) 
-                            xt, yt = map_to_targ(xc, yc)
+                            # Remove jitters by maintaining a queue of points, and take the average
+                            pt_queue.append(np.array((xc,yc)))
+                            #https://stackoverflow.com/questions/55153446/getting-the-average-of-a-list-of-coordinates-in-python
+                            xc_avg,yc_avg = np.average(pt_queue,axis=0)
+                            xt, yt = map_to_targ(xc_avg, yc_avg)
                             if xt is None or yt is None:
                                 self.logger.info(f'Can''t move cursor:  xt,yt None {xt},{yt}')
                             else:
@@ -661,8 +670,8 @@ class TechnicianUI():
                 if k == ord('q'):
                     cv2.destroyAllWindows()
                     break
-                elif k == ord('r'):
-                    reload_labelme()
+                #elif k == ord('r'):
+                #    reload_labelme()
                 # A keystroke here that simulates a mouse click doesn't help
                 # because we will lose focus
                 # elif k == ord('c'):
