@@ -931,7 +931,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # main_seq()
         # TODO Load model in tu before passing to subprocesses
-        self.tu = TechnicianUI('info')
+        self.tu = TechnicianUI('debug')
     
         # ---------------------
         # Set up mapping data
@@ -941,7 +941,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Target area for mouse movements
         # Format:  [[y1, x1], [y2,x2]]
         # -- will be set in labelme -- 
-        self.tu.set_targ_rect([[46,12], [560, 610]])
+        self.tu.set_targ_rect([[0,0], [self.pos().y(), self.pos().x()]])
     
         self.pointer_proc = mp.Process(target=self.tu.main_par, args=(tracker_args,))
         self.pointer_proc.start()

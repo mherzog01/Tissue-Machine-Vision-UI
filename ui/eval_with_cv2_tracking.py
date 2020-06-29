@@ -482,8 +482,12 @@ class TechnicianUI():
         # https://stackoverflow.com/questions/13576732/move-mouse-with-python-on-windows-7
         def move_to(x,y):
             #targ_x, targ_y = map_to_targ(x - orig_x,y - orig_y)
-            win32api.SetCursorPos((int(round(x)),int(round(y))))
-            #win32api.SetCursorPos((targ_x,targ_y))
+            try:
+                x_int, y_int = int(round(x)),int(round(y))
+                win32api.SetCursorPos((x_int, y_int))
+                #win32api.SetCursorPos((targ_x,targ_y))
+            except Exception as e:
+                self.log_err(f'Unable to set cursor position to {x_int},{y_int}.  Orig params:  {x},{y}')
         
         def map_to_targ(rel_x, rel_y):
             targ_x = (rel_x / self.src_w * self.targ_w + self.targ_rect[0][1]) * self.scale_factor
@@ -506,7 +510,8 @@ class TechnicianUI():
         
         tracker = self.get_new_tracker()
     
-        queue_size = 5
+        #queue_size = 5
+        queue_size = 10
         pt_queue = deque(maxlen=queue_size)
         self.log_msg('Initializing multiprocessing environment', show_time=True)
         with mp.Manager() as manager:
@@ -595,7 +600,11 @@ class TechnicianUI():
                     bbox_cv2 = self.tf_to_cv2_box(res_boxes[0])
                     tracker = self.get_new_tracker()
                     time.sleep(0.02)
-                    tracker_init = tracker.init(res_img, bbox_cv2)
+                    try:
+                        tracker_init = tracker.init(res_img, bbox_cv2)
+                    except Exception as e:
+                        self.log_err(f'Error setting tracker to bounding box {bbox_cv2} for image of shape {res_img.shape}.  Error = {e}')
+                        tracker_init = False
                     if tracker_init:
                         ips.num_track_inits += 1
                     else:
@@ -622,6 +631,9 @@ class TechnicianUI():
                     p1 = (int(bbox_cv2[0]), int(bbox_cv2[1]))
                     p2 = (int(bbox_cv2[0] + bbox_cv2[2]), int(bbox_cv2[1] + bbox_cv2[3]))
                     cv2.rectangle(image_np, p1, p2, (255,0,0), 2, 1)
+                    tf_box = self.cv2_to_tf_box(bbox_cv2)
+                    xc, yc = get_center(tf_box) 
+                    cv2.putText(image_np, f"({xc},{yc})", (100,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
                 else :
                     # Tracking failure
                     ips.num_no_tracks += 1
@@ -669,8 +681,6 @@ class TechnicianUI():
                     if True: #boxes_changed:
                         #self.logger.info(f'res_boxes={res_boxes}')
                         if True:
-                            tf_box = self.cv2_to_tf_box(bbox_cv2)
-                            xc, yc = get_center(tf_box) 
                             # Remove jitters by maintaining a queue of points, and take the average
                             pt_queue.append(np.array((xc,yc)))
                             #https://stackoverflow.com/questions/55153446/getting-the-average-of-a-list-of-coordinates-in-python
@@ -758,7 +768,8 @@ if __name__ == '__main__':
     # Target area for mouse movements
     # Format:  [[y1, x1], [y2,x2]]
     # -- will be set in labelme -- 
-    tu.set_targ_rect([[46,12], [560, 610]])
+    #tu.set_targ_rect([[46,12], [560, 610]])
+    tu.set_targ_rect([[0,0], [867, 1227]])
 
     
     # --------------------
