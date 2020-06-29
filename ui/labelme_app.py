@@ -916,7 +916,7 @@ class MainWindow(QtWidgets.QMainWindow):
               '-m',
               '--model_file',
               # default='/tmp/mobilenet_v1_1.0_224_quant.tflite',
-              default=r'C:\Users\mherzo\Documents\GitHub\tf-models\app\autoML\models\tflite-tissue_defect_ui_20200414053330\model.tflite',
+              default=r'C:\Users\mherzo\Documents\GitHub\Tissue-Machine-Vision-UI\autoML\models\tflite-tissue_defect_ui_20200414053330\model.tflite',
               help='.tflite model to be executed')
         #TODO make model labels soft:  default=r'C:\Users\mherzo\Documents\GitHub\tf-models\app\ui_label_map.pbtxt',
         parser.add_argument(
@@ -2266,9 +2266,10 @@ class MainWindow(QtWidgets.QMainWindow):
         user_extns.dispMsgBox(msg)
     
     def takePicture(self):
-        if self.parent_class is None:
-            print('Unable to acquire image - not linked to image acquisition module')
-            return
+        #TODO Enable real image acquisition
+        # if self.parent_class is None:
+        #     print('Unable to acquire image - not linked to image acquisition module')
+        #     return
         try:
             # mc = ModelessConfirm('Remove the pointer from the tissue.  To take a picture, click the foot pedal or mouse.', title='Taking Picture', window_pos=QtCore.QPoint(100,200))
             # mc.show()

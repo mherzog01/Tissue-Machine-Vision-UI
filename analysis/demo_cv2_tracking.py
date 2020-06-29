@@ -13,8 +13,8 @@ if __name__ == '__main__' :
 
     # Read video
     #video = cv2.VideoCapture("videos/chaplin.mp4")
-    video = cv2.VideoCapture(1)
-    #video = cv2.VideoCapture(0)
+    #video = cv2.VideoCapture(1)
+    video = cv2.VideoCapture(0)
 
     # Exit if video not opened.
     if not video.isOpened():

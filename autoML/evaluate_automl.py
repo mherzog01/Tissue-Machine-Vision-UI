@@ -266,24 +266,26 @@ class EvalAutoML():
 
 if __name__ == '__main__':
 
+    # Assume that the root of this GitHub project (e.g. c:\users\mherzo\documents\github\Tissue-Machine-Vision-UI) is in the PYTHONPATH
+    # TODO Make references to paths below soft
     parser = argparse.ArgumentParser()
     parser.add_argument(
           '-i',
           '--image',
           # default='/tmp/grace_hopper.bmp',
-          default=r'C:\Users\mherzo\Documents\GitHub\tf-models\app\images\WIN_20200411_22_55_39_Pro.jpg',
+          default=r'.\images\WIN_20200411_22_55_39_Pro.jpg',
           help='image to be classified')
     parser.add_argument(
           '-m',
           '--model_file',
           # default='/tmp/mobilenet_v1_1.0_224_quant.tflite',
-          default=r'C:\Users\mherzo\Documents\GitHub\tf-models\app\autoML\models\tflite-tissue_defect_ui_20200414053330\model.tflite',
+          default=r'.\models\tflite-tissue_defect_ui_20200414053330\model.tflite',
           help='.tflite model to be executed')
     parser.add_argument(
           '-l',
           '--label_file',
     #      default='/tmp/labels.txt',
-          default=r'C:\Users\mherzo\Documents\GitHub\tf-models\app\ui_label_map.pbtxt',
+          default=r'.\ui_label_map.pbtxt',
           help='name of file containing labels')
     parser.add_argument(
           '--input_mean',

@@ -34,6 +34,7 @@ from importlib import reload
 import datetime
 #import labelme__main__
 from os import path as osp
+import os
 from collections import deque
 
 # def reload_labelme():
@@ -74,6 +75,7 @@ class TechnicianUI():
         self.num_processes = 1
         print(f'# processes {self.num_processes}')
         
+        # TODO Use multiprocessing logging https://docs.python.org/3/howto/logging-cookbook.html#logging-to-a-single-file-from-multiple-processes
         if log_level_txt == 'debug':
             log_level = logging.DEBUG
         elif log_level_txt == 'info':
@@ -82,7 +84,28 @@ class TechnicianUI():
             log_level = logging.NOTSET
         else:
             log_level = logging.INFO
-        self.logger = mp.log_to_stderr(log_level)
+        #self.logger = mp.log_to_stderr(log_level)
+        #TODO The os.remove call below does not delete the file due to a lock
+        #tmp_logger = logging.getLogger('tmp_logger')
+        #tmp_logger.setLevel(logging.DEBUG)
+        #tmp_fh = logging.FileHandler(r'c:\tmp\test.log')
+        #tmp_logger.addHandler(tmp_fh)
+        logfile = osp.join(r'c:\tmp',__name__ + '.log')
+        try:
+            #tmp_logger.debug(f'Trying to delete {logfile}')
+            os.remove(logfile)
+        except OSError as e:
+            #tmp_logger.debug(f'Error deleting.  Error={e}')
+            pass
+        #tmp_fh.close()
+        #tmp_logger.removeHandler(tmp_fh)
+        fhl = logging.getLogger(__name__)
+        fhl.setLevel(log_level)
+        fh = logging.FileHandler(logfile)  # Will be __main__.log if called by executing this module
+        fhl.addHandler(fh)
+        self.logger = fhl
+        self.log_msg(f'Logging initialized to {logfile}')
+        #self.logger_handler = fh
         
     def fmt_cur_datetime(self):
         return f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}'
@@ -705,7 +728,7 @@ if __name__ == '__main__':
           '-m',
           '--model_file',
           # default='/tmp/mobilenet_v1_1.0_224_quant.tflite',
-          default=r'C:\Users\mherzo\Documents\GitHub\tf-models\app\autoML\models\tflite-tissue_defect_ui_20200414053330\model.tflite',
+          default=r'..\autoML\models\tflite-tissue_defect_ui_20200414053330\model.tflite',
           help='.tflite model to be executed')
     parser.add_argument(
           '-l',
@@ -755,6 +778,11 @@ if __name__ == '__main__':
     #    w.close()
     
     # https://stackoverflow.com/questions/12034393/import-side-effects-on-logging-how-to-reset-the-logging-module
-    logging.shutdown()
+    #logging.shutdown()
+    #TODO Use more elegant approach to clean up loggers
+    reload(logging)
+    #https://stackoverflow.com/questions/34554967/duplicate-log-entries-and-locked-log-files-in-spyder-ide
+    #tu.logger_handler.close()
+    #tu.logger.removeHandler(tu.logger_handler)
     print(f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}: In module __main__ - end')
         

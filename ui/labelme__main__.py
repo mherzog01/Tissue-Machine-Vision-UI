@@ -5,6 +5,7 @@ import os
 import os.path as osp
 import sys
 import yaml
+from importlib import reload
 
 from qtpy import QtCore
 from qtpy import QtWidgets
@@ -19,8 +20,8 @@ from labelme.utils import newIcon
 import pickle
 
 def main(parent_class = None):
-    
-    # Hardcodes
+
+    # TODO Remove hardcodes below
     label_file = r'C:\Tmp\Work1\labels.yaml'
     flag_file = r'C:\Tmp\Work1\labelflags.yaml'
     #'TEMP': 'C:\\Users\\mherzo\\AppData\\Local\\Temp'
@@ -232,6 +233,10 @@ class TestClass():
         
 # this main block is required to generate executable by pyinstaller
 if __name__ == '__main__':
-    test_class = TestClass()
-    app, win = main(parent_class=test_class)
+    # https://stackoverflow.com/questions/12034393/import-side-effects-on-logging-how-to-reset-the-logging-module
+    #TODO Use more elegant approach to clean up loggers
+    reload(logging)
+    #test_class = TestClass()
+    #app, win = main(parent_class=test_class)
+    app, win = main()
     sys.exit(app.exec_())
