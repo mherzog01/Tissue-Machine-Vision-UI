@@ -2276,7 +2276,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.paint_object(p, s)
             p.end()
             img_to_export = pixmap.toImage()
-            img_to_export.convertTo(QtGui.QImage.Format_Indexed8)
+            img_to_export.convertToFormat(QtGui.QImage.Format_Indexed8)
             basename = osp.basename(self.labelFile.filename)
             basename = osp.splitext(basename)[0]
             targ_file = osp.join(targ_dir_and_prefix,basename + f'_{label.replace("/","")}.png')
@@ -2469,6 +2469,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.disp_to_log('** Nesting ends **')
 
     def nest_nestFab(self):
+        
+        # TODO ** Calibrate DXF sheet
+        # TODO * Support circles
 
         self.disp_to_log('Processing tissue portion of image', False)
         # --------------------------------------------------------------------
