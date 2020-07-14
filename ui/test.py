@@ -1,34 +1,38 @@
-#import eval_with_cv2_tracking as ewct
-import test_proc
-import multiprocessing as mp
-import time
-import datetime
+import pandas as pd
+from os import path as osp
 
-import os
+cutting_req_file = r'c:\tmp\work1\cutting_requirements.xlsx'
+cutting_req_df = pd.read_excel(cutting_req_file)
 
-def info(title):
-    print(title)
-    print('module name:', __name__)
-    print('parent process:', os.getppid())
-    print('process id:', os.getpid())
+df_targ = cutting_req_df[cutting_req_df['Type'] != 'File'].copy()
 
-def f(name):
-    info('function f')
-    print('hello', name)
+df_targ['Rotation'] =  -1
+df_targ['Tilt'] = 0
+df_targ['Mirror'] = 0
+df_targ['IsSheet'] = 0
 
-if __name__ == '__main__':
-    info('main line')
-    proc_pointer = mp.Process(target=test_proc.run_test)
-    proc_pointer.start()
-    #test_proc.run_test()
-    
-    print(f'In main: looping')
-    for i in range(15):
-        print(f'In main: {datetime.datetime.now():%H:%M:%S}')
-        time.sleep(1)
-    print(f'In main: ending')
-    proc_pointer.terminate()
-    time.sleep(1)
-    proc_pointer.close()
-    print(f'In main: done')
-    
+# Enforce data types
+df_targ = df_targ.astype({'Quantity':int,
+                          'Priority':int,
+                          'Rotation':int,
+                          'Tilt':int,
+                          'Mirror':int,
+                          'IsSheet':int})
+
+# Append sheet (IsSheet = 1)
+input_sheet_dxf = 'x'
+# TODO:  Set lot and piece #, or change Name
+new_key = len(df_targ)
+df_targ.loc[new_key] = {'Type':'File',
+                        'Name':'Lot NHxxx Piece x',
+                        'Quantity':1,
+                        'Priority':1,
+                        'Rotation':-1,
+                        'Tilt':0,
+                        'Mirror':0,
+                        'Value1':input_sheet_dxf,
+                        'Value2':'',
+                        'IsSheet':1}
+input_csv = osp.join(r'c:\tmp','cutting_inputs_nestfab.csv')
+df_targ.to_csv(input_csv, index=False)
+

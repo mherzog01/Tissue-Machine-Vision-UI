@@ -34,7 +34,10 @@ from importlib import reload
 import datetime
 #import labelme__main__
 from os import path as osp
+import os
 from collections import deque
+
+import multiprocessing_logging
 
 # def reload_labelme():
 #     print('Reloading labelme')
@@ -48,6 +51,8 @@ MAX_TRIES = 10
 
 # Model eval parameters
 THRESHOLD = 0.2
+
+LOGFILE = r'c:\tmp\labelme_root.log'
 
 class ImgProcStats():
     def __init__(self):
@@ -63,7 +68,7 @@ class ImgProcStats():
 
 class TechnicianUI():
     
-    def __init__(self, log_level_txt='info'):
+    def __init__(self, log_level_txt='debug'):
         print(f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}: In TechnicianUI - init')
     
         # Python version: 3.7.4 (default, Aug  9 2019, 18:34:13) [MSC v.1915 64 bit (AMD64)]
@@ -74,15 +79,20 @@ class TechnicianUI():
         self.num_processes = 1
         print(f'# processes {self.num_processes}')
         
-        if log_level_txt == 'debug':
-            log_level = logging.DEBUG
-        elif log_level_txt == 'info':
-            log_level = logging.INFO
-        elif log_level_txt == 'notset':
-            log_level = logging.NOTSET
-        else:
-            log_level = logging.INFO
-        self.logger = mp.log_to_stderr(log_level)
+        log_level = getattr(logging, log_level_txt.upper())
+        self.logger = logging.getLogger()
+        # TODO use multiprocessing_logging?  If so, set up from __main__, not __init__
+        self.logger.setLevel(log_level)
+        print(f'self.logger={self.logger}.  Handlers={self.logger.handlers}.  # Handlers={len(self.logger.handlers)}')
+        if len(self.logger.handlers) == 0:
+            fh = logging.FileHandler(filename=LOGFILE)
+            self.logger.addHandler(fh)
+            
+    # https://stackoverflow.com/questions/49247356/how-to-close-file-of-filehandler-opened-in-python-process
+    def __del__(self):
+        for h in self.logger.handlers:
+            h.close()
+            self.logger.removeHandler(h)
         
     def fmt_cur_datetime(self):
         return f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}'
@@ -143,7 +153,10 @@ class TechnicianUI():
     
     # Target area for mouse movements
     # Format:  [[y1, x1], [y2,x2]]
-    def set_targ_rect(self, targ_rect):
+    def set_targ_rect(self, targ_rect=None):
+        # https://stackoverflow.com/questions/3129322/how-do-i-get-monitor-resolution-in-python
+        if targ_rect is None:
+            targ_rect = [[0,0], [win32api.GetSystemMetrics(1),win32api.GetSystemMetrics(0)]]
         self.targ_rect = targ_rect
         self.targ_h = targ_rect[1][0] - targ_rect[0][0] + 1
         self.targ_w = targ_rect[1][1] - targ_rect[0][1] + 1
@@ -447,9 +460,9 @@ class TechnicianUI():
     
 
     def get_new_tracker(self):
-        return cv2.TrackerTLD_create()
+        #return cv2.TrackerTLD_create()
         #return cv2.TrackerCSRT_create() -- poor tracking
-        #return cv2.TrackerMIL_create()
+        return cv2.TrackerMIL_create()
 
 
     
@@ -462,9 +475,20 @@ class TechnicianUI():
             win32api.SetCursorPos((int(round(x)),int(round(y))))
             #win32api.SetCursorPos((targ_x,targ_y))
         
+        # Map image coordinates to target
+        # Create a border in source image.  Map all points in the border to the edge of the target.
+        # TODO Fix issue with mouse in bottom and right border -- goes off screen -- mapping not correct.
         def map_to_targ(rel_x, rel_y):
-            targ_x = (rel_x / self.src_w * self.targ_w + self.targ_rect[0][1]) * self.scale_factor
-            targ_y = (rel_y / self.src_h * self.targ_h + self.targ_rect[0][0]) * self.scale_factor
+            border = 30
+            x = max(rel_x - border,0)
+            y = max(rel_y - border,0)
+            if x > self.src_w - border * 2:
+                x = self.src_w - border * 2
+            if y > self.src_h - border * 2:
+                y = self.src_h - border * 2
+             
+            targ_x = (x / (self.src_w - border * 2) * self.targ_w + self.targ_rect[0][1]) * self.scale_factor
+            targ_y = (y / (self.src_h - border * 2) * self.targ_h + self.targ_rect[0][0]) * self.scale_factor
             #self.logger.info(f'targ_x,targ_y={targ_x,targ_y}')
             return round(targ_x), round(targ_y)
         
@@ -648,6 +672,7 @@ class TechnicianUI():
                         if True:
                             tf_box = self.cv2_to_tf_box(bbox_cv2)
                             xc, yc = get_center(tf_box) 
+                            cv2.putText(image_np, f"({xc},{yc}) ({self.src_w},{self.src_h})", (100,80), cv2.FONT_HERSHEY_SIMPLEX, 0.75,(0,0,255),2)
                             # Remove jitters by maintaining a queue of points, and take the average
                             pt_queue.append(np.array((xc,yc)))
                             #https://stackoverflow.com/questions/55153446/getting-the-average-of-a-list-of-coordinates-in-python
@@ -723,6 +748,14 @@ if __name__ == '__main__':
           help='input standard deviation')
     args = parser.parse_args()
     
+    # TODO Need more elegant way of clearing past logging setups
+    logging.root.handlers = []
+    reload(logging)
+    # https://stackoverflow.com/questions/12034393/import-side-effects-on-logging-how-to-reset-the-logging-module
+    #logging.shutdown()
+    if osp.exists(LOGFILE):
+        os.remove(LOGFILE)
+    
     # main_seq()
     # TODO Load model in tu before passing to subprocesses
     tu = TechnicianUI('info')
@@ -734,8 +767,7 @@ if __name__ == '__main__':
     tu.scale_factor = 1.0
     # Target area for mouse movements
     # Format:  [[y1, x1], [y2,x2]]
-    # -- will be set in labelme -- 
-    tu.set_targ_rect([[46,12], [560, 610]])
+    tu.set_targ_rect()
 
     
     # --------------------
@@ -753,8 +785,7 @@ if __name__ == '__main__':
     tu.main_par(args)
     #for w in app.topLevelWindows():
     #    w.close()
+    del tu
     
-    # https://stackoverflow.com/questions/12034393/import-side-effects-on-logging-how-to-reset-the-logging-module
-    logging.shutdown()
     print(f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S}: In module __main__ - end')
         

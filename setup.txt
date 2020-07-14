@@ -1,2 +1,3 @@
 1.  PYTHONPATH to labelme and object detection
 2.  ImgViz package for labelme
+3.  cv2 - cv2-contrib(?)

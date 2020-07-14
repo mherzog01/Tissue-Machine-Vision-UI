@@ -9,6 +9,8 @@ import webbrowser
 import pandas as pd
 import time
 import shutil
+import datetime
+import glob
 
 import imgviz
 from qtpy import QtCore
@@ -25,7 +27,8 @@ from labelme import user_extns
 from labelme.config import get_config
 from labelme.label_file import LabelFile
 from labelme.label_file import LabelFileError
-from labelme.logger import logger
+#from labelme.logger import logger
+import logging
 from labelme.shape import Shape
 from labelme.widgets import Canvas
 from labelme.widgets import LabelDialog
@@ -42,6 +45,8 @@ import traceback
 import win32con
 import win32api
 from pynput import keyboard
+
+import ezdxf
 
 from eval_with_cv2_tracking import TechnicianUI
 #TODO Instead of argparse and related in this module, get values from calling program
@@ -75,6 +80,7 @@ import argparse
 #20.  Update Tutorial 
 #21.  Propose merge with source fork.  Update GitHub doc.
 #22.  When zoom with control keys, lose center of viewing area
+#23.  Look at labelme v4.5 (we have v4.2)
 
 # FIXME
 # - [medium] Set max zoom value to something big enough for FitWidth/Window
@@ -120,6 +126,9 @@ import argparse
 
 LABEL_COLORMAP = imgviz.label_colormap(value=200)
 
+TISSUE_BOUNDARY_LABEL = 'Tissue Boundary'
+
+
 
 class MainWindow(QtWidgets.QMainWindow):
 
@@ -135,8 +144,11 @@ class MainWindow(QtWidgets.QMainWindow):
         parent_class=None,
     ):
         print('In custom version of app.py')
+        #TODO Use labelme.logger but capture multiprocessing output
+        self.logger = logging.getLogger()
+        self.logger.info('Initializing')
         if output is not None:
-            logger.warning(
+            self.logger.warning(
                 'argument output is deprecated, use output_file instead'
             )
             if output_file is None:
@@ -175,6 +187,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # -------- Dock windows - begin definitions ----------
         # ----------------------------------------------------        
         
+        #------------------------------
         # Dock window - Flags
         self.flag_dock = self.flag_widget = None
         self.flag_dock = QtWidgets.QDockWidget(self.tr('Flags'), self)
@@ -185,6 +198,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.flag_dock.setWidget(self.flag_widget)
         self.flag_widget.itemChanged.connect(self.setDirty)
 
+        #------------------------------
         # Dock window - Label list
         self.labelList.itemSelectionChanged.connect(self.labelSelectionChanged)
         self.labelList.itemDoubleClicked.connect(self.editLabel)
@@ -195,6 +209,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.shape_dock.setObjectName('Labels')
         self.shape_dock.setWidget(self.labelList)
 
+        #------------------------------
         # Dock window - Unique labels
         self.uniqLabelList = UniqueLabelQListWidget()
         self.uniqLabelList.setToolTip(self.tr(
@@ -210,6 +225,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.label_dock.setObjectName(u'Label List')
         self.label_dock.setWidget(self.uniqLabelList)
 
+        #------------------------------
         # Dock window - file list
         self.fileSearch = QtWidgets.QLineEdit()
         self.fileSearch.setPlaceholderText(self.tr('Search Filename'))
@@ -233,6 +249,7 @@ class MainWindow(QtWidgets.QMainWindow):
         fileListWidget.setLayout(fileListLayout)
         self.file_dock.setWidget(fileListWidget)
         
+        #------------------------------
         # Dock window - Annotator list
         self.annotator_dock = QtWidgets.QDockWidget(self.tr(u'Annotator List'), self)
         self.annotator_dock.setObjectName(u'Annotators')
@@ -279,6 +296,32 @@ class MainWindow(QtWidgets.QMainWindow):
         annotatorListWidget.setLayout(annotatorListLayout)
         self.annotator_dock.setWidget(annotatorListWidget)
 		
+        #------------------------------
+        # Dock window - Process Status
+        self.process_status_dock = QtWidgets.QDockWidget(self.tr(u'Process Status'), self)
+        self.process_status_dock.setObjectName(u'Process Status')
+        processStatusLayout = QtWidgets.QVBoxLayout()
+        processStatusLayout.setContentsMargins(0, 0, 0, 0)
+        processStatusLayout.setSpacing(0)
+  
+        self.selNestingApproach = QtWidgets.QComboBox()
+        self.selNestingApproach.setStyleSheet(cbstyle)
+  
+        #TODO After selecting nesting software, remove this dropdown and all references to it
+        #nesting_approach_list = ['NestFab','NestLib','PowerNest']
+        nesting_approach_list = ['NestFab']
+        for label in nesting_approach_list:
+            self.selNestingApproach.addItem(label)
+        processStatusLayout.addWidget(self.selNestingApproach)
+  
+        self.procStatusLog = QtWidgets.QPlainTextEdit()
+        self.procStatusLog.setReadOnly(True)
+        processStatusLayout.addWidget(self.procStatusLog)
+    
+        processStatusWidget = QtWidgets.QWidget()
+        processStatusWidget.setLayout(processStatusLayout)
+        self.process_status_dock.setWidget(processStatusWidget)
+
         # ----------------------------------------------------        
         # -------- Dock windows - end definition--------------
         # ====================================================
@@ -308,7 +351,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(scrollArea)
 
         features = QtWidgets.QDockWidget.DockWidgetFeatures()
-        for dock in ['flag_dock', 'label_dock', 'shape_dock', 'file_dock']:
+        for dock in ['flag_dock', 'label_dock', 'shape_dock', 'file_dock', 'process_status_dock']:
+            if not dock in self._config:
+                continue
             if self._config[dock]['closable']:
                 features = features | QtWidgets.QDockWidget.DockWidgetClosable
             if self._config[dock]['floatable']:
@@ -324,6 +369,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, self.shape_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.file_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.annotator_dock)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.process_status_dock)
 
         # =====================
         # Action definition begin
@@ -772,6 +818,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.label_dock.toggleViewAction(),
                 self.shape_dock.toggleViewAction(),
                 self.file_dock.toggleViewAction(),
+                self.process_status_dock.toggleViewAction(),
                 None,
                 fill_drawing,
                 None,
@@ -838,7 +885,7 @@ class MainWindow(QtWidgets.QMainWindow):
             (filename is None or output_file != filename) and
             self._config['auto_save']
             ):
-            logger.warn(
+            self.logger.warn(
                 'If `auto_save` argument is True, `output_file` argument '
                 'is ignored and output filename is automatically '
                 'set as IMAGE_BASENAME.json.'
@@ -941,10 +988,15 @@ class MainWindow(QtWidgets.QMainWindow):
         # Target area for mouse movements
         # Format:  [[y1, x1], [y2,x2]]
         # -- will be set in labelme -- 
-        self.tu.set_targ_rect([[46,12], [560, 610]])
+        # self.tu.set_targ_rect([[46,12], [560, 610]])
+        #self.tu.set_targ_rect([[0,0], [self.pos().y(),self.pos().x()]])
+        self.tu.set_targ_rect()
     
         self.pointer_proc = mp.Process(target=self.tu.main_par, args=(tracker_args,))
+        
+        self.logger.info('Initializing pointer')
         self.pointer_proc.start()
+        self.logger.info('Initializing pointer complete')
         #===================================================================
 
         # Callbacks:
@@ -1712,7 +1764,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 flags.update(self.labelFile.flags)
         # Display additional labels if needed.  Assume image is the same for all label files selected
         if self.isGroundTruthBuilderMode:
-            #logger.debug('Loading ground truth data')
+            #self.logger.debug('Loading ground truth data')
             for s in shapes:
                 s['source'] = self.groundTruthDirName
                 s['opacity'] = self.groundTruthOpacity
@@ -2018,7 +2070,7 @@ class MainWindow(QtWidgets.QMainWindow):
         label_file = self.getLabelFile()
         if osp.exists(label_file):
             os.remove(label_file)
-            logger.info('Label file is removed: {}'.format(label_file))
+            self.logger.info('Label file is removed: {}'.format(label_file))
 
             item = self.fileListWidget.currentItem()
             item.setCheckState(Qt.Unchecked)
@@ -2195,6 +2247,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # This routine is related to user_extns.exportAnnotationsForImage, but it is not the same:
     # The user could have unsaved annotations when they choose export
+    # TODO Verify that this processes unsaved annotations.  May need to read from self.labelList instead of self.labelFile
     def exportMasks(self):
         targ_dir = r'c:\tmp\work3'
         targ_dir_and_prefix = targ_dir
@@ -2212,7 +2265,7 @@ class MainWindow(QtWidgets.QMainWindow):
             #self.loadLabels(shapes_to_export)
             # Manually draw shapes - can't seem to get a bitmap from Qt
 			
-            overlay_over_image = False
+            overlay_over_image = False #Useful for debugging -- ensure annotations are properly placed on picture
             if overlay_over_image:
                 pixmap = self.canvas.pixmap.copy() #QtGui.QPixmap()
             else:
@@ -2220,14 +2273,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 pixmap = QtGui.QPixmap(cur_pixmap_size.width(), cur_pixmap_size.height())
             p = QtGui.QPainter(pixmap)
             for s in shapes_to_export:
-                s_obj = Shape(label=s['label'], shape_type=s['shape_type'],
-                 flags=s['flags'], group_id=s['group_id'])
-                for pt in s['points']:
-                    s_obj.addPoint(QtCore.QPointF(pt[0],pt[1]))
-                s_obj.close = True
-                s_obj.fill = True
-                s_obj.point_size = 0
-                s_obj.paint(p)
+                self.paint_object(p, s)
             p.end()
             img_to_export = pixmap.toImage()
             img_to_export.convertTo(QtGui.QImage.Format_Indexed8)
@@ -2244,6 +2290,45 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status(msg)
         print(msg)
             
+    # Paint a Shape object using a painter
+    #
+    # p = Painter
+    # s_dict = Shape dict
+    # s_obj = Shape obj
+    #
+    def paint_object(self, p, s_dict = None, s_obj = None, color = None):
+        color_obj = None
+        if color:
+            color_obj = QtGui.QColor(color)
+        if s_dict:
+            s_obj_new = Shape(label=s_dict['label'], 
+                          shape_type=s_dict['shape_type'],
+                          flags=s_dict['flags'], 
+                          group_id=s_dict['group_id'],
+                          line_color=color_obj)
+            points = s_dict['points']
+            for pt in points:
+                s_obj_new.addPoint(QtCore.QPointF(pt[0],pt[1]))
+        elif s_obj:
+            s_obj_new = Shape(label=s_obj.label, 
+                          shape_type=s_obj.shape_type,
+                          flags=s_obj.flags, 
+                          group_id=s_obj.group_id,
+                          line_color=color_obj)
+            points = s_obj.points
+            for pt in points:
+                s_obj_new.addPoint(QtCore.QPointF(pt.x(),pt.y()))
+        else:
+            return
+        if color_obj:
+            s_obj_new.fill_color = color_obj
+        s_obj_new.selected = False
+        s_obj_new.close = True
+        s_obj_new.fill = True
+        s_obj_new.point_size = 0
+        s_obj_new.paint(p)
+
+
     def exportByLot(self):
         user_extns.exportByLot()
         
@@ -2312,14 +2397,191 @@ class MainWindow(QtWidgets.QMainWindow):
         if osp.exists(self.acquired_image):
             os.remove(self.acquired_image)
         
+        
+    def disp_to_log(self,msg, disp_time=True):
+        cursor = QtGui.QTextCursor(self.procStatusLog.document())
+        cursor.setPosition(0)
+        self.procStatusLog.setTextCursor(cursor)
+        if disp_time:
+            disp_msg = f'{datetime.datetime.now():%H:%M:%S}: {msg}'
+        else:
+            disp_msg = msg
+        disp_msg += '\n'
+        self.procStatusLog.insertPlainText(disp_msg)
+        
+    
 
     def nest(self):
-        msgBox = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Information, 'Nesting', 'Nesting not yet implemented')
+        #msgBox = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Information, 'Nesting', 'Nesting not yet implemented')
         #result = msgBox.exec()
-        msgBox.exec()
-        self.pointer_proc.terminate()
-        time.sleep(1)
-        self.pointer_proc.close()
+        #msgBox.exec()
+        
+        # TODO More precise way to clean out files.  Do by lot, not at each nesting step.
+        # Clean out old files
+        for file in glob.glob(osp.join(self.output_dir,'*')):
+            if file == self.acquired_image or (not self.labelFile is None and file == self.labelFile.filename):
+                continue
+            os.remove(file)
+            
+        err_msg = None
+        #TODO Find a better way of exiting a block without executing all of it.  Currently using a 'while' loop with a break at the end.
+        while not err_msg:
+            self.disp_to_log('** Nesting begins **')
+            self.disp_to_log('Getting tissue boundary', False)
+            num_found = 0
+            if not self.labelList is None:
+                for item in self.labelList:
+                    if item.shape() is None:
+                        continue
+                    if item.shape().label == TISSUE_BOUNDARY_LABEL:
+                        num_found += 1
+            if num_found == 0:
+                err_msg = 'Automatic identification of tissue boundary not yet implemented.  Please define manually (label={TISSUE_BOUNDARY_LABEL}).'
+            elif num_found > 1:
+                err_msg = f'Only one tissue boundary can be defined (label={TISSUE_BOUNDARY_LABEL}).  Found {num_found}.'
+            if err_msg:
+                break
+            
+            # TODO Implemenet real cutting requirements
+            self.cutting_req_file = r'c:\tmp\work1\cutting_requirements.xlsx'
+            self.disp_to_log('Getting cutting requirements from {self.cutting_req_file}', False)
+            if not osp.exists(self.cutting_req_file):
+                err_msg = f'Unable to find cutting requirements in {self.cutting_req_file}'
+                break
+            # TODO Handle import errors, and errors in general
+            self.cutting_req_df = pd.read_excel(self.cutting_req_file)
+            
+            approach_str = str(self.selNestingApproach.currentText())
+            if approach_str == 'NestFab':
+                self.nest_nestFab()
+            else:
+                err_msg = f'Approach {approach_str} not implemented'
+                break
+            
+            # If we get to here, we've successfully executed all conditions, so just leave the loop
+            break
+            
+        if err_msg:
+            #TODO More elegant method of displaying error messages
+            msgBox = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Information, 'Nesting', err_msg)
+            result = msgBox.exec()
+            self.disp_to_log(f'Error:  {err_msg}', False)
+        self.disp_to_log('** Nesting ends **')
+
+    def nest_nestFab(self):
+
+        self.disp_to_log('Processing tissue portion of image', False)
+        # --------------------------------------------------------------------
+        # Create sheet - color = defect/not tissue.  White = good tissue
+        
+        # Make an empty image, same size as original.  All pixels black.
+        overlay_over_image = False # Set to True for debugging
+        cur_pixmap_size = self.canvas.pixmap.size()
+        if overlay_over_image:
+            pixmap = self.canvas.pixmap.copy() #QtGui.QPixmap()
+        else:
+            pixmap = QtGui.QPixmap(cur_pixmap_size.width(), cur_pixmap_size.height())
+        
+        p = QtGui.QPainter(pixmap)
+        
+        # Set all pixels inside tissue boundary to white
+        boundary_to_export = [item.shape() for item in self.labelList if not item.shape() is None and item.shape().label == TISSUE_BOUNDARY_LABEL]
+        self.paint_object(p, s_obj=boundary_to_export[0], color='white')
+        img = pixmap.toImage()
+        #img = img.convertToFormat(img.Format_Mono)
+        #img.invertPixels()
+        input_tissue_img = osp.join(self.output_dir,'input_tissue.png')
+        img.save(input_tissue_img)
+        #pixmap.convertFromImage(img)
+        
+        # Set all pixels within each defect to black
+        shapes_to_export = [item.shape() for item in self.labelList if not item.shape() is None and item.shape().label != TISSUE_BOUNDARY_LABEL]
+        self.disp_to_log(f'Excluding {len(shapes_to_export)} defects', False)
+        for s in shapes_to_export:
+            self.paint_object(p, s_obj=s, color='black')
+        img_to_export = pixmap.toImage()
+        img_to_export = img_to_export.convertToFormat(img.Format_Mono)
+        input_sheet_img = osp.join(self.output_dir,'input_sheet.png')
+        img_to_export.save(input_sheet_img)
+        p.end()
+
+        # Create DXF
+        input_sheet_dxf = osp.join(self.output_dir,'input_sheet.dxf')
+        doc = ezdxf.new('R2000')  # image requires the DXF R2000 format or later
+        msp = doc.modelspace()  # adding entities to the model space
+        
+        # Not sure if it matters whether we draw the tissue boundary first, but do it just to make sure
+        # TODO Support shapes other than polygons -- e.g. circles
+        for s in boundary_to_export + shapes_to_export:
+            points = []
+            # From labelme/shape.py
+            if s.shape_type == 'rectangle':
+                assert len(s.points) in [1, 2]
+                if len(s.points) == 2:
+                    #rectangle = s.getRectFromLine(*s.points)
+                    pass
+            elif s.shape_type == "circle":
+                assert len(s.points) in [1, 2]
+                if len(s.points) == 2:
+                    #rectangle = s.getCircleRectFromLine(s.points)
+                    #line_path.addEllipse(rectangle)
+                    pass
+            elif s.shape_type == "linestrip":
+                #for i, p in enumerate(s.points):
+                #    line_path.lineTo(p)
+                #    s.drawVertex(vrtx_path, i)
+                pass
+            # Polygon?
+            else:
+                for i, pt in enumerate(s.points):
+                    points += [(pt.x(),pt.y())]
+                # Close the polygon
+                points += [points[0]]
+                msp.add_lwpolyline(points)
+
+        doc.saveas(input_sheet_dxf)
+        
+        self.disp_to_log(f'Exported sheet to {input_sheet_dxf}', False)
+
+        # Read cutting requirements
+        # TODO Handle contours and non-rectangular shapes.  Remove filter on Type = File
+        # TODO Ensure self.cutting_req_df is set
+        self.disp_to_log(f'Preparing cutting requirements for nesting', False)
+        df_targ = self.cutting_req_df[self.cutting_req_df['Type'] != 'File'].copy()
+        
+        df_targ['Rotation'] =  -1
+        df_targ['Tilt'] = 0
+        df_targ['Mirror'] = 0
+        df_targ['IsSheet'] = 0
+
+        # Enforce data types
+        df_targ = df_targ.astype({'Quantity':int,
+                                  'Priority':int,
+                                  'Rotation':int,
+                                  'Tilt':int,
+                                  'Mirror':int,
+                                  'IsSheet':int})
+
+        # Append sheet (IsSheet = 1)
+        # TODO:  Set lot and piece #, or change Name
+        new_key = len(df_targ)
+        # Using df_targ[new_key,'Field name'] = value messes up the data frame data types, 
+        # as when you add the row, the integer columns become NA, which make the values float/object
+        df_targ.loc[new_key] = {'Type':'File',
+                                'Name':'Lot NHxxx Piece x',
+                                'Quantity':1,
+                                'Priority':1,
+                                'Rotation':-1,
+                                'Tilt':0,
+                                'Mirror':0,
+                                'Value1':input_sheet_dxf,
+                                'Value2':'',
+                                'IsSheet':1}
+        input_csv = osp.join(self.output_dir,'cutting_inputs_nestfab.csv')
+        df_targ.to_csv(input_csv, index=False)
+        self.disp_to_log(f'Performing nesting computations', False)
+
+        # Call nesting
 
 
     def simulate_click(self):

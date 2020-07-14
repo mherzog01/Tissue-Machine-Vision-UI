@@ -5,6 +5,7 @@ import os
 import os.path as osp
 import sys
 import yaml
+import time
 
 from qtpy import QtCore
 from qtpy import QtWidgets
@@ -13,10 +14,13 @@ from labelme import __appname__
 from labelme import __version__
 from labelme_app import MainWindow
 from labelme.config import get_config
-from labelme.logger import logger
+#from labelme.logger import logger
 from labelme.utils import newIcon
+import multiprocessing_logging as mpl
 
 import pickle
+
+from importlib import reload
 
 def main(parent_class = None):
     
@@ -39,7 +43,8 @@ def main(parent_class = None):
     )
     parser.add_argument(
         '--logger-level',
-        default='info',
+        #default='info',
+        default='debug',
         choices=['debug', 'info', 'warning', 'fatal', 'error'],
         help='logger level',
     )
@@ -134,7 +139,12 @@ def main(parent_class = None):
         print('{0} {1}'.format(__appname__, __version__))
         sys.exit(0)
 
-    logger.setLevel(getattr(logging, args.logger_level.upper()))
+    logging.basicConfig(filename=r'c:\tmp\labelme_root.log', filemode='w', level=getattr(logging, args.logger_level.upper()))
+    # TODO Does mpl work?
+    mpl.install_mp_handler()
+    # TODO Set up root logger in __main__, not this procedure.  Use labelme.logger instead of manually setting up logger.
+    logger = logging.getLogger()
+    logger.info('Logger initialized')
 
     if hasattr(args, 'flags'):
         if os.path.isfile(args.flags):
@@ -215,7 +225,8 @@ def main(parent_class = None):
     # TODO Get from win
     if not parent_class is None:
         #Maximized window (QT - x,y): 960,493 -- 1920, 986
-        parent_class.set_targ_rect([[0,0],[986, 1920]])
+        #parent_class.set_targ_rect([[0,0],[986, 1920]])
+        parent_class.set_targ_rect()
         
     return app, win
 
@@ -227,11 +238,25 @@ class TestClass():
                 image_list = pickle.load(f)
                 self.image_from_camera = image_list[0]
                 
-    def set_targ_rect(self, targ_rect):
+    def set_targ_rect(self, targ_rect=None):
         self.targ_rect = targ_rect
         
 # this main block is required to generate executable by pyinstaller
 if __name__ == '__main__':
+    #TODO Better way of resetting logging
+    reload(logging)
+    #https://stackoverflow.com/questions/13733552/logger-configuration-to-log-to-file-and-print-to-stdout
+    #logger.root.hanlders = []
     test_class = TestClass()
     app, win = main(parent_class=test_class)
-    sys.exit(app.exec_())
+    app.exec_()
+    print('Terminating')
+    # TODO make this part of exit from labelme_app.py ** Leaves extraneous processes **
+    win.listener.stop()
+    win.pointer_proc.terminate()
+    time.sleep(1)
+    win.pointer_proc.close()
+    del app
+    del win
+    print('Exiting')
+    sys.exit()
