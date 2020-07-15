@@ -158,6 +158,11 @@ class MainWindow(QtWidgets.QMainWindow):
         if config is None:
             config = get_config()
         self._config = config
+        
+        # Get calibration data
+        # TODO Determine final calibration architecture.  Store in config?
+        self.calib_factors = {'w':81.6, 'h':81.8}  # Number of pixels in uom
+        self.calib_uom = 'cm'  
 
         super(MainWindow, self).__init__()
         self.setWindowTitle(__appname__)
@@ -2516,28 +2521,31 @@ class MainWindow(QtWidgets.QMainWindow):
         # Not sure if it matters whether we draw the tissue boundary first, but do it just to make sure
         # TODO Support shapes other than polygons -- e.g. circles
         for s in boundary_to_export + shapes_to_export:
+            points_uom = [self.point_pixels_to_uom(pt) for pt in s.points]
             points = []
             # From labelme/shape.py
             if s.shape_type == 'rectangle':
-                assert len(s.points) in [1, 2]
-                if len(s.points) == 2:
+                assert len(points_uom) in [1, 2]
+                if len(points_uom) == 2:
                     #rectangle = s.getRectFromLine(*s.points)
                     pass
             elif s.shape_type == "circle":
-                assert len(s.points) in [1, 2]
-                if len(s.points) == 2:
-                    #rectangle = s.getCircleRectFromLine(s.points)
+                assert len(points_uom) in [1, 2]
+                if len(points_uom) == 2:
+                    #rectangle = s.getCircleRectFromLine(points_uom)
                     #line_path.addEllipse(rectangle)
                     pass
             elif s.shape_type == "linestrip":
-                #for i, p in enumerate(s.points):
+                #for i, p in enumerate(points_uom):
                 #    line_path.lineTo(p)
                 #    s.drawVertex(vrtx_path, i)
                 pass
             # Polygon?
             else:
-                for i, pt in enumerate(s.points):
-                    points += [(pt.x(),pt.y())]
+                #self.logger.debug(f'points_uom = {points_uom}')
+                #self.logger.info(f'points_uom = {points_uom}')                
+                for i, pt in enumerate(points_uom):
+                    points += [(pt[0],pt[1])]
                 # Close the polygon
                 points += [points[0]]
                 msp.add_lwpolyline(points)
@@ -2591,3 +2599,21 @@ class MainWindow(QtWidgets.QMainWindow):
         #https://stackoverflow.com/questions/33319485/how-to-simulate-a-mouse-click-without-interfering-with-actual-mouse-in-python
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN,0,0)
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP,0,0)        
+
+
+    def pixels_to_uom(self, pixels, dimension):
+        if dimension not in self.calib_factors:
+            self.logger.error(f'In pixels_to_uom.  Dimension = {dimension} not in {self.calib_factors}')
+            return
+        return pixels / self.calib_factors[dimension]
+    
+    def point_pixels_to_uom(self, point_pixels):
+        point_uom = []
+        dimensions = self.calib_factors.keys()
+        if hasattr(point_pixels, 'x') and hasattr(point_pixels,'y'):
+            in_vals = [point_pixels.x(), point_pixels.y()]
+        else:
+            in_vals = point_pixels
+        for value, dimension in zip(in_vals, dimensions):
+            point_uom += [self.pixels_to_uom(value, dimension)]
+        return point_uom
