@@ -1,5 +1,9 @@
 import argparse
 import codecs
+
+# TODO Fix multiprocessing logging
+# https://stackoverflow.com/questions/20332359/logging-with-multiprocessing-madness
+# https://docs.python.org/3/howto/logging-cookbook.html#logging-to-a-single-file-from-multiple-processes
 import logging
 import os
 import os.path as osp

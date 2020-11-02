@@ -1,0 +1,48 @@
+<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="36cm" height="23.5132cm" viewBox="0 0 1196 781" xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" font-family="Verdana" baseProfile="full" font-size="10">
+<defs>
+<g id="part120002">
+<path d="M 0 0 L 210 0 L 210 120 L 0 120 Z 
+" />
+</g>
+<g id="part120003">
+<path d="M 0 0 L 120 0 L 120 60 L 0 60 Z 
+" />
+</g>
+</defs>
+<defs>
+<g id="sheet_defects_130000" fill="black" fill-opacity="0.4" stroke-width="0">
+<path d="M 0 0 L 505 0 L 505 138 L 440 144 L 500 317 L 505 326 L 505 647 L 0 647 Z 
+" />
+<path d="M 505 0 L 1010 0 L 1010 647 L 505 647 L 505 326 L 605 519 L 652 639 L 728 639 L 786 618 L 852 642 L 881 626 L 949 306 L 1004 173 L 912 181 L 626 139 L 563 134 L 505 138 Z 
+" />
+<path d="M 713 443 L 731 477 L 750 529 L 713 511 L 666 390 Z 
+" />
+<path d="M 925 246 L 889 257 L 894 230 Z 
+" />
+</g>
+</defs>
+<g />
+<g stroke="black" stroke-width="1" id="nesting0" transform="matrix(1,0,0,-1,129,744)">
+<rect x="0" y="0" width="1010" height="647" fill="grey" fill-opacity="0.22" stroke-width="3" />
+<!-- Caption = C:\Users\mherzo\Documents\GitHub\tf-models\app\ui\NestingResult.svg_result_140000_S1_L31.3577 PN2_PreNest 1 130000 8 110022 110021 110020 110034 110030 110031 110033 110032 8 5 4617315517961601024 5 4617315517961601024 0 70 4634626229029306368 70 4634626229029306368 0 100 4636737291354636289 100 4636737291354636289 0 5 4617315517961601024 5 4617315517961601024 0 50 4632233691727265793 50 4632233691727265793 0 70 4634626229029306368 70 4634626229029306368 0 95 4636385447633747969 95 4636385447633747969 0 100 4636737291354636289 100 4636737291354636289 0 8 21.0227 4626610572104874795 5.073 4617397708654800536 19.01 4626044049108099118 4.486 4616736805409483915 29.689 4629049926858316678 14.125 4624141286146834432 21.5727 4626765399667614305 9.137 4621333291779168928 20.2331 4626388318337364155 11.49 4622657913019569275 23.0541 4627182364876164449 15.192 4624741953747134972 29.0724 4628876361506377540 9.793 4621702586948613309 31.3577 4629519629781453284 10.357 4622020090722342929 
+ -->
+<g>
+<use xlink:href="#part120002" transform="matrix(1,0,0,1,630,152) rotate(5)" fill="darksalmon" />
+<use xlink:href="#part120002" transform="matrix(1,0,0,1,570,134) rotate(70)" fill="darksalmon" />
+<use xlink:href="#part120002" transform="matrix(1,0,0,1,890,423) rotate(100)" fill="darksalmon" />
+<use xlink:href="#part120003" transform="matrix(1,0,0,1,647,274) rotate(5)" fill="palevioletred" />
+<use xlink:href="#part120003" transform="matrix(1,0,0,1,606,344) rotate(50)" fill="palevioletred" />
+<use xlink:href="#part120003" transform="matrix(1,0,0,1,691,455) rotate(70)" fill="palevioletred" />
+<use xlink:href="#part120003" transform="matrix(1,0,0,1,872,293) rotate(95)" fill="palevioletred" />
+<use xlink:href="#part120003" transform="matrix(1,0,0,1,940,310) rotate(100)" fill="palevioletred" />
+</g>
+<use xlink:href="#sheet_defects_130000" />
+<g stroke-width="1" id="Common_Cuts_1" />
+<g stroke-width="1" id="Multiheads_1" />
+<g transform="matrix(1,0,0,-1,0,0)" />
+<g transform="matrix(1,0,0,-1,0,0)" />
+</g>
+</svg>

@@ -11,6 +11,9 @@ import time
 import shutil
 import datetime
 import glob
+import sys
+import numpy as np
+import subprocess
 
 import imgviz
 from qtpy import QtCore
@@ -313,8 +316,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.selNestingApproach.setStyleSheet(cbstyle)
   
         #TODO After selecting nesting software, remove this dropdown and all references to it
-        #nesting_approach_list = ['NestFab','NestLib','PowerNest']
-        nesting_approach_list = ['NestFab']
+        nesting_approach_list = ['PowerNest','NestFab','NestLib']
+        #nesting_approach_list = ['NestFab']
         for label in nesting_approach_list:
             self.selNestingApproach.addItem(label)
         processStatusLayout.addWidget(self.selNestingApproach)
@@ -961,67 +964,64 @@ class MainWindow(QtWidgets.QMainWindow):
         # Launch pointer processor in a separate process to prevent blocking
         #TODO clean up process - get args from calling program
         #TODO clean up process - set up multiprocessing pool here - don't create a process which then creates a pool
-        import multiprocessing as mp
-
-        parser = argparse.ArgumentParser()
-        parser.add_argument(
-              '-m',
-              '--model_file',
-              # default='/tmp/mobilenet_v1_1.0_224_quant.tflite',
-              default=r'C:\Users\mherzo\Documents\GitHub\tf-models\app\autoML\models\tflite-tissue_defect_ui_20200414053330\model.tflite',
-              help='.tflite model to be executed')
-        #TODO make model labels soft:  default=r'C:\Users\mherzo\Documents\GitHub\tf-models\app\ui_label_map.pbtxt',
-        parser.add_argument(
-              '--input_mean',
-              default=127.5, type=float,
-              help='input_mean')
-        parser.add_argument(
-              '--input_std',
-              default=127.5, type=float,
-              help='input standard deviation')
-        tracker_args = parser.parse_args()
-        
-        # main_seq()
-        # TODO Load model in tu before passing to subprocesses
-        self.tu = TechnicianUI('info')
+        if False:
+            import multiprocessing as mp
     
-        # ---------------------
-        # Set up mapping data
-        # ---------------------
-        #scale_factor = 2.0
-        self.tu.scale_factor = 1.0
-        # Target area for mouse movements
-        # Format:  [[y1, x1], [y2,x2]]
-        # -- will be set in labelme -- 
-        # self.tu.set_targ_rect([[46,12], [560, 610]])
-        #self.tu.set_targ_rect([[0,0], [self.pos().y(),self.pos().x()]])
-        self.tu.set_targ_rect()
-    
-        self.pointer_proc = mp.Process(target=self.tu.main_par, args=(tracker_args,))
+            parser = argparse.ArgumentParser()
+            parser.add_argument(
+                  '-m',
+                  '--model_file',
+                  # default='/tmp/mobilenet_v1_1.0_224_quant.tflite',
+                  default=r'C:\Users\mherzo\Documents\GitHub\tf-models\app\autoML\models\tflite-tissue_defect_ui_20200414053330\model.tflite',
+                  help='.tflite model to be executed')
+            #TODO make model labels soft:  default=r'C:\Users\mherzo\Documents\GitHub\tf-models\app\ui_label_map.pbtxt',
+            parser.add_argument(
+                  '--input_mean',
+                  default=127.5, type=float,
+                  help='input_mean')
+            parser.add_argument(
+                  '--input_std',
+                  default=127.5, type=float,
+                  help='input standard deviation')
+            tracker_args = parser.parse_args()
+            
+            # main_seq()
+            # TODO Load model in tu before passing to subprocesses
+            self.tu = TechnicianUI('info')
         
-        self.logger.info('Initializing pointer')
-        self.pointer_proc.start()
-        self.logger.info('Initializing pointer complete')
-        #===================================================================
-
+            # ---------------------
+            # Set up mapping data
+            # ---------------------
+            #scale_factor = 2.0
+            self.tu.scale_factor = 1.0
+            # Target area for mouse movements
+            # Format:  [[y1, x1], [y2,x2]]
+            # -- will be set in labelme -- 
+            # self.tu.set_targ_rect([[46,12], [560, 610]])
+            #self.tu.set_targ_rect([[0,0], [self.pos().y(),self.pos().x()]])
+            self.tu.set_targ_rect()
+        
+            self.pointer_proc = mp.Process(target=self.tu.main_par, args=(tracker_args,))
+            
+            self.logger.info('Initializing pointer')
+            self.pointer_proc.start()
+            self.logger.info('Initializing pointer complete')
+            #===================================================================
+    
+            # -----------------------------------------------
+            # Set up hotkey to simulate mouse click
+            #
+            # TODO Turn off listener when exit from program.  Currently, it continues to run in a separate thread until the Python console is destroyed
+            # shortcut = QtWidgets.QShortcut(QtGui.QKeySequence('F2'), self)
+            # shortcut.setContext(QtCore.Qt.ApplicationShortcut)
+            # shortcut.activated.connect(self.simulate_click)
+            self.listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)            
+            self.listener.start()
+    
         # Callbacks:
         self.zoomWidget.valueChanged.connect(self.paintCanvas)
 
         self.populateModeActions()
-
-        # -----------------------------------------------
-        # Set up hotkey to simulate mouse click
-        #
-        # TODO Turn off listener when exit from program.  Currently, it continues to run in a separate thread until the Python console is destroyed
-        # shortcut = QtWidgets.QShortcut(QtGui.QKeySequence('F2'), self)
-        # shortcut.setContext(QtCore.Qt.ApplicationShortcut)
-        # shortcut.activated.connect(self.simulate_click)
-        self.listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)            
-        self.listener.start()
-
-        # self.firstStart = True
-        # if self.firstStart:
-        #    QWhatsThis.enterWhatsThisMode()
 
     # https://pynput.readthedocs.io/en/latest/keyboard.html#pynput.keyboard.Key        
     def on_press(self, key):
@@ -2413,6 +2413,8 @@ class MainWindow(QtWidgets.QMainWindow):
             disp_msg = msg
         disp_msg += '\n'
         self.procStatusLog.insertPlainText(disp_msg)
+        app = QtWidgets.QApplication.instance()
+        app.processEvents()
         
     
 
@@ -2449,16 +2451,22 @@ class MainWindow(QtWidgets.QMainWindow):
             
             # TODO Implemenet real cutting requirements
             self.cutting_req_file = r'c:\tmp\work1\cutting_requirements.xlsx'
-            self.disp_to_log('Getting cutting requirements from {self.cutting_req_file}', False)
+            self.disp_to_log(f'Getting cutting requirements from {self.cutting_req_file}', False)
             if not osp.exists(self.cutting_req_file):
                 err_msg = f'Unable to find cutting requirements in {self.cutting_req_file}'
                 break
-            # TODO Handle import errors, and errors in general
+            # TODO Handle import errors, especially missing values, and errors in general
             self.cutting_req_df = pd.read_excel(self.cutting_req_file)
+            self.cutting_req_df.astype({'Quantity':int,'Priority':int}, copy=False)
             
+            self.boundary_to_export = [item.shape() for item in self.labelList if not item.shape() is None and item.shape().label == TISSUE_BOUNDARY_LABEL]
+            self.shapes_to_export = [item.shape() for item in self.labelList if not item.shape() is None and item.shape().label != TISSUE_BOUNDARY_LABEL]
+
             approach_str = str(self.selNestingApproach.currentText())
             if approach_str == 'NestFab':
                 self.nest_nestFab()
+            elif approach_str == 'PowerNest':
+                self.nest_powerNest()
             else:
                 err_msg = f'Approach {approach_str} not implemented'
                 break
@@ -2493,8 +2501,7 @@ class MainWindow(QtWidgets.QMainWindow):
         p = QtGui.QPainter(pixmap)
         
         # Set all pixels inside tissue boundary to white
-        boundary_to_export = [item.shape() for item in self.labelList if not item.shape() is None and item.shape().label == TISSUE_BOUNDARY_LABEL]
-        self.paint_object(p, s_obj=boundary_to_export[0], color='white')
+        self.paint_object(p, s_obj=self.boundary_to_export[0], color='white')
         img = pixmap.toImage()
         #img = img.convertToFormat(img.Format_Mono)
         #img.invertPixels()
@@ -2503,9 +2510,9 @@ class MainWindow(QtWidgets.QMainWindow):
         #pixmap.convertFromImage(img)
         
         # Set all pixels within each defect to black
-        shapes_to_export = [item.shape() for item in self.labelList if not item.shape() is None and item.shape().label != TISSUE_BOUNDARY_LABEL]
-        self.disp_to_log(f'Excluding {len(shapes_to_export)} defects', False)
-        for s in shapes_to_export:
+        self.shapes_to_export = [item.shape() for item in self.labelList if not item.shape() is None and item.shape().label != TISSUE_BOUNDARY_LABEL]
+        self.disp_to_log(f'Excluding {len(self.shapes_to_export)} defects', False)
+        for s in self.shapes_to_export:
             self.paint_object(p, s_obj=s, color='black')
         img_to_export = pixmap.toImage()
         img_to_export = img_to_export.convertToFormat(img.Format_Mono)
@@ -2520,7 +2527,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # Not sure if it matters whether we draw the tissue boundary first, but do it just to make sure
         # TODO Support shapes other than polygons -- e.g. circles
-        for s in boundary_to_export + shapes_to_export:
+        for s in self.boundary_to_export + self.shapes_to_export:
             points_uom = [self.point_pixels_to_uom(pt) for pt in s.points]
             points = []
             # From labelme/shape.py
@@ -2564,6 +2571,10 @@ class MainWindow(QtWidgets.QMainWindow):
         df_targ['Tilt'] = 0
         df_targ['Mirror'] = 0
         df_targ['IsSheet'] = 0
+        
+        # Convert from cm to mm
+        df_targ['Value1'] = df_targ['Value1'] * 10
+        df_targ['Value2'] = df_targ['Value2'] * 10
 
         # Enforce data types
         df_targ = df_targ.astype({'Quantity':int,
@@ -2594,6 +2605,181 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Call nesting
 
+
+    def nest_powerNest(self):
+        
+        disp_data = True
+        def log_data(msg):
+            if disp_data:
+                print(msg)
+        
+        # https://stackoverflow.com/questions/15109548/set-pythonpath-before-import-statements/15109660
+        sys.path.append(r"C:\Users\mherzo\Box Sync\Herzog_Michael - Personal Folder\2020\Machine Vision Misc\Nesting\PowerNest\PowerNestCloud\python")
+        
+        import powernest as pn
+        from powernest import Point, Orientation
+        
+        session = pn.CreateSession()
+        orientation = pn.CreateFreeOrientation(0)
+        
+        #pn.time_to_run = 10
+
+        # part_data = np.array([['Rectangle', '16x20', 100, 1, 20.0, 16.0],
+        #                       ['Rectangle', '8x16', 100, 2, 16.0, 8.0],
+        #                       ['Rectangle', '4x7', 100, 3, 7.0, 4.0],
+        #                       ['Rectangle', '1x2', 100, 4, 2.0, 1.0],
+        #                       ['File', 'ContourLarge', 0, 99, 'File name', None]])
+        #part_data = np.array([['Rectangle', '3x5', 100, 3, 5, 1]], dtype=object)
+        #df_parts = pd.DataFrame(part_data, 
+        #                        columns=['Type', 'Name', 'Quantity', 'Priority', 'Value1', 'Value2'])
+        #df_parts.astype({'Quantity':int,'Priority':int})
+        
+        #shapeList = [(2,2), (4,7), (4,8), (8,16), (16,20)]
+        #shapes = [AddRectangle(*pt) for pt in shapeList]
+        partList = []
+        log_data(f"Part,Type,Length,Width,Qty,Priority")
+        for df_idx in self.cutting_req_df.index:
+            row = self.cutting_req_df.loc[df_idx]
+            if row['Type'] != 'Rectangle':
+                continue
+            shape = pn.AddRectangle(session, float(row['Value1']),float(row['Value2'])) 
+        
+            # TODO Use AddSeveralParts
+            # TODO Limit parts to a max cm2
+            for part_instance in range(min(row['Quantity'],10)):
+                part = pn.AddPart(session, shape,[orientation])
+                log_data(f"Part,{row['Type']},{float(row['Value1'])},{float(row['Value2'])},{row['Quantity']},{row['Priority']}")
+                # TODO Check error for adding part
+                error_code = pn.PartSetPriority(session, part, row['Priority'])
+                if error_code:
+                    self.disp_to_log(f'Error setting part priority.  Name {row["Name"]}, instance {part_instance}, priority {row["Priority"]}.', False)
+                    #TODO Need more robust way to handle error
+                    continue
+                partList += [part]
+
+        # Build sheet
+        log_data(f"Sheet,Type,Point List")
+        pointList = []
+        for s in self.boundary_to_export:
+            points_uom = [self.point_pixels_to_uom(pt) for pt in s.points]
+            # From labelme/shape.py
+            if s.shape_type == 'rectangle':
+                assert len(points_uom) in [1, 2]
+                if len(points_uom) == 2:
+                    #rectangle = s.getRectFromLine(*s.points)
+                    pass
+            elif s.shape_type == "circle":
+                assert len(points_uom) in [1, 2]
+                if len(points_uom) == 2:
+                    #rectangle = s.getCircleRectFromLine(points_uom)
+                    #line_path.addEllipse(rectangle)
+                    pass
+            elif s.shape_type == "linestrip":
+                #for i, p in enumerate(points_uom):
+                #    line_path.lineTo(p)
+                #    s.drawVertex(vrtx_path, i)
+                pass
+            # Polygon?
+            else:
+                #self.logger.debug(f'points_uom = {points_uom}')
+                #self.logger.info(f'points_uom = {points_uom}')                
+                for i, pt in enumerate(points_uom):
+                    pointList += [Point(pt[0],pt[1])]
+
+        curSheet = pn.AddPolygonalSheet(session, pointList)
+        log_data(f"Sheet,Boundary,'{[(pt.x, pt.y) for pt in pointList]}'")
+        
+        # Add defects to sheet
+        # TODO Combine this code with the one to build a sheet
+        for s in self.shapes_to_export:
+            points_uom = [self.point_pixels_to_uom(pt) for pt in s.points]
+            defectPoints = []
+            # From labelme/shape.py
+            if s.shape_type == 'rectangle':
+                assert len(points_uom) in [1, 2]
+                if len(points_uom) == 2:
+                    #rectangle = s.getRectFromLine(*s.points)
+                    pass
+            elif s.shape_type == "circle":
+                assert len(points_uom) in [1, 2]
+                if len(points_uom) == 2:
+                    #rectangle = s.getCircleRectFromLine(points_uom)
+                    #line_path.addEllipse(rectangle)
+                    pass
+            elif s.shape_type == "linestrip":
+                #for i, p in enumerate(points_uom):
+                #    line_path.lineTo(p)
+                #    s.drawVertex(vrtx_path, i)
+                pass
+            # Polygon?
+            else:
+                #self.logger.debug(f'points_uom = {points_uom}')
+                #self.logger.info(f'points_uom = {points_uom}')                
+                for i, pt in enumerate(points_uom):
+                    defectPoints += [Point(pt[0],pt[1])]
+                pn.SheetAddDefect(session, curSheet, defectPoints);
+                log_data(f"Sheet,Defect,'{[(pt.x, pt.y) for pt in defectPoints]}'")
+        
+        sheetList = [curSheet]
+        sheetQuantityList = [1]
+        
+        self.disp_to_log(f'Starting nesting with requested time {pn.time_to_run}s.  # parts={len(partList)}.')
+        try:
+            multi_result = None
+            errorMessage = None
+            outputId = None
+            #TODO Run request to nesting software asynchronously to check on status
+            #TODO Gracefully handle condition if no part can fit in sheet
+            # multiResult, errorMessage, outputId = pn.HttpMultiNest(session, 
+            #                             sheetList, 
+            #                             sheetQuantityList, 
+            #                             partList, 
+            #                             pn.time_to_run,
+            #                             pn.powernest_server, pn.powernest_port, 
+            #                             pn.powernest_login)
+            multiResult, errorMessage, outputId = pn.MultiNest(session, 
+                                        sheetList, 
+                                        sheetQuantityList, 
+                                        partList, 
+                                        pn.time_to_run)
+        except Exception as e:
+            self.disp_to_log(f'Error getting nesting result.  Traceback:  {traceback.print_exc()}')
+        if not (errorMessage is None) and (len(errorMessage) > 0):
+            errorNesting = True
+            self.disp_to_log(f'multiResult Error {errorMessage}, id={outputId}')
+        else:
+            errorNesting = False
+            self.disp_to_log(f'Received nesting results, id={outputId}')
+
+        svg_path = os.path.join(os.path.dirname(__file__), 'NestingResult.svg')
+        if os.path.exists(svg_path):
+            os.remove(svg_path)
+        if not errorNesting:
+            error_code = pn.DrawMultiSvg(session, multiResult, svg_path)
+            if not error_code:
+                self.disp_to_log(f'Nesting result image written to {svg_path}', False)
+            else:
+                self.disp_to_log(f'Error {pn.ErrorMessage(error_code)}', False)
+                
+            # Launch viewer
+            # TODO render nested products in main LabelMe screen
+            self.disp_to_log(f'Viewer launched.  File={svg_path}',False)
+            output = subprocess.Popen(args=svg_path,
+                                      shell=True)
+            # error_code = os.system(svg_path)
+            # if not error_code:
+            #     self.disp_to_log(f'Viewer launched.  File={svg_path}',False)
+            # else:
+            #     #TODO Get error description
+            #     self.disp_to_log(f'Error launching viewer.  Code={error_code}.', False)
+        
+        #TODO Use Try-Except to clean up crashes
+        bool_status = pn.DeleteSession(session)
+        if bool_status <= 0:
+            self.disp_to_log(f'Error:  processing complete, but unable to delete session.  Error status={bool_status}.')
+        else:
+            self.disp_to_log(f'Session ended.  Return code={bool_status}')        
+                
 
     def simulate_click(self):
         #https://stackoverflow.com/questions/33319485/how-to-simulate-a-mouse-click-without-interfering-with-actual-mouse-in-python

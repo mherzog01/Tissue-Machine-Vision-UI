@@ -4,16 +4,16 @@ Created on Thu Apr 16 23:32:03 2020
 
 @author: MHerzo
 
-TO DO
-- Performance - not enough fine control of pointer for annotations
-- Log pointer tracking to a log that is separate from labelme 
-- Separate log for mouse clicks?
-- LabelMe
-    * Annotate
-
 """
 
-# TODO Address jitters - if objec is still, multiple model evaluations give different values, which move the cursor
+#TO DO
+# - Address jitters - if objec is still, multiple model evaluations give different values, which move the cursor
+# - Performance - not enough fine control of pointer for annotations
+# - Log pointer tracking to a log that is separate from labelme 
+# - Separate log for mouse clicks?
+# - LabelMe
+#     * Annotate
+
 
 import numpy as np
 import multiprocessing as mp
