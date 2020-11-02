@@ -1,5 +1,5 @@
 # TODO Make xref of buckets and mount points
-if [ $1 = '-u' ]
+if [ ${1}x = '-ux' ]
 then
     echo "Unmounting buckets"
     fusermount -u ./gcp/tmp
