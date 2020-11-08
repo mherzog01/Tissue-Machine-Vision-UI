@@ -11,6 +11,7 @@ from PIL import Image
 import io
 import os
 import six
+import shutil
 
 import tensorflow as tf
 
@@ -52,6 +53,8 @@ class ExportInferenceGraphTest(unittest.TestCase):
     tmp_dir = r'c:\tmp\work4\tmp'
     pipeline_config_path = r'C:\Tmp\Work4\trained_models\tissue_boundary\ckpts\10_30_2020_20_02_25\cfg\pipeline.config'
 
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+
     output_directory = tmp_dir
 
     pipeline_config = pipeline_pb2.TrainEvalPipelineConfig()
@@ -62,7 +65,8 @@ class ExportInferenceGraphTest(unittest.TestCase):
       input_type=input_type,
       pipeline_config=pipeline_config,
       trained_checkpoint_dir=ckpt_dir,
-      output_directory=output_directory)
+      output_directory=output_directory,
+      selected_detection_keys=selected_detection_keys)
 
     saved_model_path = os.path.join(output_directory, 'saved_model')
     detect_fn = tf.saved_model.load(saved_model_path)
@@ -79,19 +83,24 @@ class ExportInferenceGraphTest(unittest.TestCase):
         cur_shape = detections[k].shape
       except:
         cur_shape = None
-    print(k, cur_shape)
+      print(k, cur_shape)
     #self.assertEqual(True, True)
 
   def test_load_trained_checkpoint(self):
-    self.load_trained_checkpoint(self)
+    self.load_trained_checkpoint()
 
   def test_load_trained_checkpoint_with_sel(self):
-    self.load_trained_checkpoint(self, selected_detection_keys)
+    selected_detection_keys = ['detection_boxes'
+                               'detection_classes',
+                               'detection_masks',
+                               'detection_scores']
+    self.load_trained_checkpoint(selected_detection_keys)
 
 
 if __name__ == '__main__':
-  if True:
+  if False:
     ExportInferenceGraphTest.test_load_trained_checkpoint()
-    #ExportInferenceGraphTest.test_load_trained_checkpoint_with_sel()
+    ExportInferenceGraphTest.test_load_trained_checkpoint_with_sel()
   else:
     unittest.main()
+    #pass
