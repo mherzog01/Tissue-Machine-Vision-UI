@@ -90,7 +90,7 @@ class ExportInferenceGraphTest(unittest.TestCase):
     self.load_trained_checkpoint()
 
   def test_load_trained_checkpoint_with_sel(self):
-    selected_detection_keys = ['detection_boxes'
+    selected_detection_keys = ['detection_boxes',
                                'detection_classes',
                                'detection_masks',
                                'detection_scores']
