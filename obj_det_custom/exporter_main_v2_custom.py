@@ -100,7 +100,7 @@ from google.protobuf import text_format
 from obj_det_custom import exporter_lib_v2_custom
 from object_detection.protos import pipeline_pb2
 
-tf.enable_v2_behavior()
+#tf.enable_v2_behavior()
 
 
 FLAGS = flags.FLAGS
@@ -139,7 +139,7 @@ flags.DEFINE_string('side_input_names', '',
                     'assuming the names will be a comma-separated list of '
                     'strings. This flag is required if using side inputs.')
 flags.DEFINE_string('selected_detection_keys', '',
-                    'List of detection keys to return. '
+                    'Comma separated list of detection keys to return. '
                     'If not set, process will return values for all keys defined in model.')
 
 flags.mark_flag_as_required('pipeline_config_path')
@@ -152,11 +152,16 @@ def main(_):
   with tf.io.gfile.GFile(FLAGS.pipeline_config_path, 'r') as f:
     text_format.Merge(f.read(), pipeline_config)
   text_format.Merge(FLAGS.config_override, pipeline_config)
-  # exporter_lib_v2_custom.export_inference_graph(
-  #     FLAGS.input_type, pipeline_config, FLAGS.trained_checkpoint_dir,
-  #     FLAGS.output_directory, FLAGS.use_side_inputs, FLAGS.side_input_shapes,
-  #     FLAGS.side_input_types, FLAGS.side_input_names, FLAGS.selected_detection_keys)
-  print(f'Sel={FLAGS.selected_detection_keys}')
 
+  if FLAGS.selected_detection_keys:
+    selected_detection_keys = [e.strip() for e in FLAGS.selected_detection_keys.split(',')]
+  else:
+    selected_detection_keys = None
+  print(f'Sel={FLAGS.selected_detection_keys}, len={len(selected_detection_keys)}')
+  exporter_lib_v2_custom.export_inference_graph(
+      FLAGS.input_type, pipeline_config, FLAGS.trained_checkpoint_dir,
+      FLAGS.output_directory, FLAGS.use_side_inputs, FLAGS.side_input_shapes,
+      FLAGS.side_input_types, FLAGS.side_input_names, selected_detection_keys)
+  
 if __name__ == '__main__':
   app.run(main)
