@@ -119,14 +119,37 @@ class DetectionInferenceModule(tf.Module):
     detections[classes_field] = (
         tf.cast(detections[classes_field], tf.float32) + label_id_offset)
 
-    for key, val in detections.items():
-      detections[key] = tf.cast(val, tf.float32)
-
     if self.selected_detection_keys:
-      selected_detections = {key:detections[key]
-                                for key in self.selected_detection_keys
-                                    if key in detections}
+      selected_detections = {}
+      # TODO Get parameters from a config file
+      num_det_to_rtn = 20
+      for key in self.selected_detection_keys:
+        if not key in detections:
+          continue
+        # Hardcoded: num_detections,detection_boxes,detection_classes,detection_masks,detection_scores
+        if key == fields.DetectionResultFields.num_detections:
+          selected_detections[key] = detections[key]
+        else:
+          round_to = 4
+          mult_div = 10**round_to
+          # Note: because floats are not exact representations of decimals, casting them will 
+          # change the precision back to "unrounded".  Therefore, do not cast after rounding.
+          # Addl info:  https://stackoverflow.com/a/53301700/11262633
+          # 
+          # It is not clear that it is possible to reduce the precision of data in REST requests to this model.  
+          # It seems that data is cast to float (losing the truncated values) downstream of this process.
+          # Therefore, we are not currently rounding/truncating.
+          #det_val = tf.cast(detections[key], tf.float32)
+          det_val = detections[key]
+          det_val = det_val[:,0:num_det_to_rtn,...]
+
+          #det_val_s = tf.as_string(det_val)
+          #det_val = tf.strings.substr(det_val_s,0,5)
+          #det_val = tf.math.round(det_val * mult_div) / mult_div
+          selected_detections[key] = det_val
     else:
+      for key, val in detections.items():
+        detections[key] = tf.cast(val, tf.float32)
       selected_detections = detections
 
     return selected_detections

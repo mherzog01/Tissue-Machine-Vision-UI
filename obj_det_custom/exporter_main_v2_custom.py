@@ -154,10 +154,11 @@ def main(_):
   text_format.Merge(FLAGS.config_override, pipeline_config)
 
   if FLAGS.selected_detection_keys:
+    # TODO validate against core.standard_fields.DetectionResultFields
     selected_detection_keys = [e.strip() for e in FLAGS.selected_detection_keys.split(',')]
   else:
     selected_detection_keys = None
-  print(f'Sel={FLAGS.selected_detection_keys}, len={len(selected_detection_keys)}')
+  #print(f'Sel={FLAGS.selected_detection_keys}, len={len(selected_detection_keys)}')
   exporter_lib_v2_custom.export_inference_graph(
       FLAGS.input_type, pipeline_config, FLAGS.trained_checkpoint_dir,
       FLAGS.output_directory, FLAGS.use_side_inputs, FLAGS.side_input_shapes,
