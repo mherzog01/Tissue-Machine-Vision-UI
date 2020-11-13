@@ -139,6 +139,12 @@ class DetectionInferenceModule(tf.Module):
           # It is not clear that it is possible to reduce the precision of data in REST requests to this model.  
           # It seems that data is cast to float (losing the truncated values) downstream of this process.
           # Therefore, we are not currently rounding/truncating.
+          #
+          # Options to work around:
+          # 1.  Convert data to one large string and encode 
+          # 2.  Debug google-cloud-api with a smaller model
+          # 3.  Threshold masks to make integer (0 or 1)
+          #
           #det_val = tf.cast(detections[key], tf.float32)
           det_val = detections[key]
           det_val = det_val[:,0:num_det_to_rtn,...]
