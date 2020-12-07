@@ -8,8 +8,6 @@ from oauth2client.client import GoogleCredentials
 #from pydrive.auth import GoogleAuth
 #from pydrive.drive import GoogleDrive
 
-print(1)
-
 class ColabAuthGCP():
   def __init__(self, run_auth=True):
     self.auth_key = {
@@ -21,6 +19,8 @@ class ColabAuthGCP():
       self.auth_user()
 
   def auth_user(self):
+    # TODO Move print statements to logger
+    print('Authentication begins')
     credentials = client.OAuth2Credentials(
         access_token=None,
         client_id=self.auth_key['client_id'],
@@ -43,4 +43,5 @@ class ColabAuthGCP():
     #gauth = GoogleAuth()
     #gauth.credentials = credentials
     #drive = GoogleDrive(gauth)
+    print('Authentication complete')
 
